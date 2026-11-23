@@ -1,0 +1,132 @@
+{# Pezzi riutilizzabili dell'interfaccia: icone, intestazioni dei
+   riquadri, celle delle carte, barre di intensita, stati vuoti. #}
+
+{# --------------------------------------------------------------------
+   Icone. Un solo stile: tratto 1.6, estremi arrotondati, nessun
+   riempimento, dimensione 16. Prendono il colore dal testo intorno.
+   -------------------------------------------------------------------- #}
+{% macro icon(name, size=16) %}
+{%- set paths = {
+  "drop": '<path d="M13.4 8.6a5.4 5.4 0 1 1-10.8 0c0-3.2 5.4-7.4 5.4-7.4s5.4 4.2 5.4 7.4Z"/>',
+  "tag": '<path d="M8.6 1.8H14v5.4l-6.8 6.8a1.2 1.2 0 0 1-1.7 0L1.8 9.5a1.2 1.2 0 0 1 0-1.7Z"/><circle cx="11.2" cy="4.8" r="1"/>',
+  "bell": '<path d="M4.2 6.6a3.8 3.8 0 0 1 7.6 0c0 3 1.2 4 1.2 4H3s1.2-1 1.2-4Z"/><path d="M6.6 13a1.6 1.6 0 0 0 2.8 0"/>',
+  "bookmark": '<path d="M3.6 2.4h8.8v11.4L8 10.8l-4.4 3Z"/>',
+  "clock": '<circle cx="8" cy="8" r="6.2"/><path d="M8 4.6V8l2.4 1.6"/>',
+  "chart": '<path d="M2 13.4h12"/><path d="M3.4 10.6l3.2-3.4 2.4 2.2 3.6-4.4"/>',
+  "layers": '<path d="M8 1.8 14.2 5 8 8.2 1.8 5Z"/><path d="m1.8 8.6 6.2 3.2 6.2-3.2"/>',
+  "wallet": '<rect x="1.8" y="3.6" width="12.4" height="9.4" rx="2"/><path d="M11 8.3h2.2"/>',
+  "search": '<circle cx="7.2" cy="7.2" r="4.6"/><path d="m10.6 10.6 3 3"/>',
+  "up": '<path d="M8 12.6V3.4"/><path d="m4.4 7 3.6-3.6L11.6 7"/>',
+  "down": '<path d="M8 3.4v9.2"/><path d="m4.4 9 3.6 3.6L11.6 9"/>',
+  "check": '<path d="m3 8.4 3.2 3.2L13 4.8"/>',
+  "alert": '<path d="M8 2.6 14.4 13H1.6Z"/><path d="M8 6.6v3"/><path d="M8 11.4h.01"/>',
+  "info": '<circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v4"/><path d="M8 4.9h.01"/>',
+  "inbox": '<path d="M1.8 8.4h3.4l1 1.8h3.6l1-1.8h3.4"/><path d="M3.4 3.4h9.2l1.6 5v4.6a1.4 1.4 0 0 1-1.4 1.4H3.2a1.4 1.4 0 0 1-1.4-1.4V8.4Z"/>',
+  "refresh": '<path d="M14 8a6 6 0 1 1-1.76-4.24"/><path d="M14 2.2v3.4h-3.4"/>'
+} -%}
+<svg width="{{ size }}" height="{{ size }}" viewBox="0 0 16 16" fill="none"
+     stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+     stroke-linejoin="round" aria-hidden="true">{{ paths.get(name, "") | safe }}</svg>
+{%- endmacro %}
+
+{# --------------------------------------------------------------------
+   Intestazione di un riquadro: dice che cosa c'e dentro e quanto.
+   -------------------------------------------------------------------- #}
+{% macro panel_head(title, icon_name=None, count=None, hint=None) %}
+<div class="panel-head">
+  {% if icon_name %}<span class="icon">{{ icon(icon_name, 15) }}</span>{% endif %}
+  <h2>{{ title }}</h2>
+  {% if count is not none %}<span class="count">{{ count }}</span>{% endif %}
+  {% if hint %}<span class="meta">{{ hint }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+{# --------------------------------------------------------------------
+   Carte
+   -------------------------------------------------------------------- #}
+{% macro thumb(image_url) %}
+  {% if image_url %}
+    <img class="thumb" src="{{ image_url }}" alt="" loading="lazy"
+         referrerpolicy="no-referrer" width="40" height="56">
+  {% else %}
+    {# Segnaposto delle stesse dimensioni: senza, le righe senza immagine
+       salterebbero in altezza rispetto alle altre. #}
+    <span class="thumb thumb-empty" aria-hidden="true"></span>
+  {% endif %}
+{% endmacro %}
+
+{% macro card_cell(blueprint_id, name, image_url, subtitle=None) %}
+<div class="card-cell">
+  {{ thumb(image_url) }}
+  <div>
+    <a class="name" href="/card/{{ blueprint_id }}">{{ name }}</a>
+    {% if subtitle %}<div class="sub">{{ subtitle }}</div>{% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# --------------------------------------------------------------------
+   Barra di intensita. `ratio` e la quota da mostrare (0-1), `full` il
+   valore che riempie la barra: oltre quello la barra resta piena, cosi
+   un caso estremo non schiaccia tutti gli altri.
+   -------------------------------------------------------------------- #}
+{% macro mag(ratio, full=0.5, warn=False, sign="-") %}
+{%- set pct = (((ratio or 0) / full) * 100) | round | int -%}
+<div class="mag">
+  <span class="val">{{ sign }}{{ ((ratio or 0) * 100) | round | int }}%</span>
+  <span class="track" aria-hidden="true">
+    <span class="fill{% if warn %} warn{% endif %}"
+          style="width: {{ 100 if pct > 100 else (4 if pct < 4 else pct) }}%"></span>
+  </span>
+</div>
+{% endmacro %}
+
+{# --------------------------------------------------------------------
+   Stato vuoto: titolo che dice che cosa manca, riga che dice come
+   riempirlo.
+   -------------------------------------------------------------------- #}
+{% macro empty_state(title, icon_name="inbox") %}
+<div class="empty">
+  {{ icon(icon_name, 26) }}
+  <span class="empty-title">{{ title }}</span>
+  <div>{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{# --------------------------------------------------------------------
+   Filtri per espansione e rarita: due righe di pastiglie, usate da
+   Dashboard, Watchlist e Mercato. `base` e il percorso della pagina,
+   `extra` i suoi altri parametri (per esempio il periodo), che le
+   pastiglie devono conservare.
+
+   Nota su CardTrader: "Alternate Art" e a sua volta un valore di rarita,
+   quindi scegliere "Super Rare" da le SR normali, senza le alternative.
+   -------------------------------------------------------------------- #}
+{% macro filters(base, expansions, selected, rarities, selected_rarity, extra={}) %}
+{% if expansions %}
+<div class="chips">
+  <span class="chips-label">Espansione</span>
+  <a class="chip {% if not selected %}on{% endif %}"
+     href="{{ filter_url(base, '', selected_rarity, extra) }}">Tutte</a>
+  {% for row in expansions %}
+  <a class="chip {% if selected == row['code'] %}on{% endif %}"
+     href="{{ filter_url(base, row['code'], selected_rarity, extra) }}"
+     title="{{ row['name'] or row['code'] }} - {{ row['cards'] }} carte quotate">{{ row["code"] | upper }}
+     <span class="n">{{ row["cards"] }}</span></a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if rarities %}
+<div class="chips">
+  <span class="chips-label">Rarita</span>
+  <a class="chip {% if not selected_rarity %}on{% endif %}"
+     href="{{ filter_url(base, selected, '', extra) }}">Tutte</a>
+  {% for row in rarities %}
+  <a class="chip {% if selected_rarity == row['rarity'] %}on{% endif %}"
+     href="{{ filter_url(base, selected, row['rarity'], extra) }}"
+     title="{{ row['cards'] }} carte quotate">{{ row["rarity"] }}
+     <span class="n">{{ row["cards"] }}</span></a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}

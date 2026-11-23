@@ -1,0 +1,93 @@
+# Raccolta prezzi automatica sui runner GitHub: gira a PC spento.
+#
+# I segreti (token CardTrader, credenziali SMTP, Telegram) NON stanno qui:
+# si impostano una volta in Settings -> Secrets and variables -> Actions
+# del repository, e il workflow li legge come variabili d'ambiente.
+#
+# Lo storico vive in data/pricedrop.db, che questo workflow ricommitta a ogni
+# ciclo: senza quel file ogni run ripartirebbe da zero, la regola di calo nel
+# tempo non si accenderebbe mai e le stesse segnalazioni verrebbero rimandate
+# in continuazione.
+name: Raccolta prezzi
+
+on:
+  schedule:
+    # Ogni 15 minuti. Attenzione: il cron di GitHub e "best effort", quindi
+    # nelle ore di punta un ciclo puo partire in ritardo o essere saltato.
+    - cron: "*/15 * * * *"
+  # Permette di lanciare una raccolta a mano dalla tab Actions.
+  workflow_dispatch:
+
+# Serve per ricommittare il database aggiornato.
+permissions:
+  contents: write
+
+# Due raccolte in parallelo sprecherebbero chiamate API e si scontrerebbero
+# sul push del database: i cicli si mettono in coda invece di sovrapporsi.
+concurrency:
+  group: raccolta
+  cancel-in-progress: false
+
+jobs:
+  raccolta:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Scarica il repository
+        uses: actions/checkout@v4
+
+      - name: Prepara Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Installa le dipendenze
+        run: pip install -r requirements.txt
+
+      - name: Raccogli i prezzi e invia le notifiche
+        env:
+          CARDTRADER_API_TOKEN: ${{ secrets.CARDTRADER_API_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          DATABASE_PATH: data/pricedrop.db
+        run: python -m pricedrop collect
+
+      - name: Consolida il database
+        # Il database usa il journal WAL: il checkpoint riversa tutto nel file
+        # principale, cosi il commit porta davvero i dati dell'ultimo ciclo.
+        run: |
+          python - <<'PY'
+          import sqlite3
+          conn = sqlite3.connect("data/pricedrop.db")
+          conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+          conn.close()
+          PY
+
+      - name: Salva lo storico aggiornato
+        run: |
+          if git diff --quiet -- data/pricedrop.db; then
+            echo "Nessuna variazione nel database: niente da committare."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/pricedrop.db
+          git commit -m "Raccolta automatica $(date -u '+%Y-%m-%d %H:%M UTC')"
+          # Se nel frattempo e arrivato un altro commit, si riallinea e riprova.
+          for tentativo in 1 2 3; do
+            if git push; then
+              exit 0
+            fi
+            echo "Push respinto, tentativo $tentativo: riallineo e riprovo."
+            git pull --rebase --autostash
+          done
+          echo "Push non riuscito dopo 3 tentativi." >&2
+          exit 1

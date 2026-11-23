@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Dashboard - PriceDrop One Piece{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+<p class="lede">
+  {{ summary.monitored_expansions }} espansioni monitorate,
+  {{ summary.cards }} carte quotate.
+  {% if selected or selected_rarity %}
+    Stai vedendo solo
+    {%- if selected %} <strong>{{ selected | upper }}</strong>{% endif %}
+    {%- if selected and selected_rarity %}, {% endif %}
+    {%- if selected_rarity %} <strong>{{ selected_rarity }}</strong>{% endif %}.
+  {% endif %}
+</p>
+
+{{ ui.filters("/", expansions, selected, rarities, selected_rarity) }}
+
+{# L'indicatore in evidenza e il numero di occasioni aperte: e quello che
+   decide se questa pagina serve a qualcosa adesso. #}
+<div class="kpi">
+  <div class="stat lead">
+    <div class="label">{{ ui.icon("tag", 13) }} Occasioni ora</div>
+    <div class="value">{{ opportunities | length }}</div>
+    <div class="note">oltre {{ settings.outlier.min_saving_cents | euro }} EUR di risparmio</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("bell", 13) }} Segnalazioni</div>
+    <div class="value">{{ summary.alerts_total }}</div>
+    <div class="note">{{ summary.alerts_today }} oggi</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("bookmark", 13) }} Watchlist</div>
+    <div class="value">{{ summary.watchlist_size }}</div>
+    <div class="note">carte seguite</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("chart", 13) }} Rilevazioni</div>
+    <div class="value">{{ summary.snapshots }}</div>
+    <div class="note">
+      {% if summary.has_history %}
+        su {{ "%.1f"|format(summary.history_span_days) }} giorni di storico
+      {% else %}
+        nessuna ancora
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("clock", 13) }} Ultimo ciclo</div>
+    <div class="value small">{{ summary.last_run_at | when }}</div>
+    <div class="note">
+      {% if summary.last_run_status == "ok" %}
+        <span class="tag">{{ ui.icon("check", 11) }} completato</span>
+      {% elif summary.last_run_status %}
+        <span class="tag warn">{{ ui.icon("alert", 11) }} {{ summary.last_run_status }}</span>
+      {% else %}
+        mai eseguito
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if summary.history_span_days < settings.trend.window_days %}
+<div class="notice">
+  <span class="icon">{{ ui.icon("info") }}</span>
+  <span>
+    <strong>Lo storico sta ancora crescendo.</strong>
+    I prezzi passati non sono recuperabili a posteriori: la serie storica parte
+    dal primo ciclo di raccolta. La regola di calo nel tempo si attiva quando una
+    carta raggiunge {{ settings.trend.min_points }} rilevazioni nella finestra di
+    {{ settings.trend.window_days }} giorni. Le occasioni qui sotto, invece, si
+    calcolano confrontando le inserzioni fra loro e sono attendibili da subito.
+  </span>
+</div>
+{% endif %}
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Occasioni sul mercato, adesso", "tag", opportunities | length,
+                   "aggiornate al " ~ (summary.last_run_at | when)) }}
+  {% if opportunities %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Carta</th>
+        <th>Set</th>
+        <th>Rarita</th>
+        <th class="num">Minimo</th>
+        <th class="num">Riferimento</th>
+        <th class="num">Risparmio</th>
+        <th class="num">Scostamento</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in opportunities %}
+      <tr>
+        <td>{{ ui.card_cell(row["blueprint_id"], row["card_name"] or row["blueprint_id"],
+                            row["image_url"], row["eligible_count"] ~ " inserzioni") }}</td>
+        <td><span class="set-tag">{{ row["expansion_code"] or "?" }}</span></td>
+        <td class="sec">{{ row["rarity"] or "-" }}</td>
+        <td class="num">{{ row["min_price_cents"] | euro }}</td>
+        <td class="num sec">{{ row["reference_price_cents"] | euro }}</td>
+        <td class="num" style="font-weight: 600">
+          {{ (row["reference_price_cents"] - row["min_price_cents"]) | euro }}
+        </td>
+        <td class="num">{{ ui.mag(row["discount"]) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="panel-note">
+    <strong>Come leggerle.</strong> Il riferimento e la mediana delle inserzioni
+    che seguono la piu economica. La barra dello scostamento riempie meta
+    larghezza a -25% e tutta la larghezza a -50% o oltre, cosi le righe si
+    confrontano a occhio prima che a numero.
+  </div>
+  {% else %}
+    {% call ui.empty_state("Nessuna occasione aperta in questo momento", "tag") %}
+      Niente sopra i {{ settings.outlier.min_saving_cents | euro }} EUR di
+      risparmio{% if selected %} in {{ selected | upper }}{% endif %}{% if selected_rarity %} fra le {{ selected_rarity }}{% endif %}.
+      {% if selected or selected_rarity %}<a href="/">Togli i filtri</a>.{% else %}Esegui una raccolta per aggiornare i dati.{% endif %}
+    {% endcall %}
+  {% endif %}
+</div>
+</div>
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Segnalazioni recenti", "bell", alerts | length,
+                   "outlier: sconto sul riferimento. trend: calo nel tempo") }}
+  {% if alerts %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Quando</th>
+        <th>Carta</th>
+        <th>Regola</th>
+        <th class="num">Prezzo</th>
+        <th class="num">Scostamento</th>
+        <th>Notifica</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in alerts %}
+      <tr>
+        <td class="sec">{{ row["created_at"] | when }}</td>
+        <td>{{ ui.card_cell(row["blueprint_id"], row["card_name"] or row["blueprint_id"], row["image_url"]) }}</td>
+        <td>
+          {% if row["rule"] == "trend" %}
+            <span class="tag warn">{{ ui.icon("down", 11) }} trend</span>
+          {% else %}
+            <span class="tag quiet">{{ ui.icon("tag", 11) }} {{ row["rule"] }}</span>
+          {% endif %}
+        </td>
+        <td class="num">{{ row["price_cents"] | euro }}</td>
+        <td class="num">{{ ui.mag(row["discount_ratio"]) }}</td>
+        <td class="sec">
+          {% if row["notified_at"] %}
+            <span class="tag">{{ ui.icon("check", 11) }} inviata</span>
+          {% else %}
+            non inviata
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state("Nessuna segnalazione finora", "bell") %}
+      Appena una carta scende sotto le soglie impostate la trovi qui{% if selected %}, per {{ selected | upper }}{% endif %}{% if selected_rarity %}, fra le {{ selected_rarity }}{% endif %}.
+    {% endcall %}
+  {% endif %}
+</div>
+</div>
+
+<div class="section grid-2">
+  <div class="panel">
+    {{ ui.panel_head("Carte di maggior valore", "layers", valuable | length) }}
+    {% if valuable %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Carta</th><th>Set</th><th>Rarita</th><th class="num">Minimo</th><th class="num">Riferimento</th></tr>
+      </thead>
+      <tbody>
+        {% for row in valuable %}
+        <tr>
+          <td>{{ ui.card_cell(row["blueprint_id"], row["card_name"] or row["blueprint_id"],
+                              row["image_url"], row["eligible_count"] ~ " inserzioni") }}</td>
+          <td><span class="set-tag">{{ row["expansion_code"] or "?" }}</span></td>
+          <td class="sec">{{ row["rarity"] or "-" }}</td>
+          <td class="num">{{ row["min_price_cents"] | euro }}</td>
+          <td class="num sec">{{ row["reference_price_cents"] | euro }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessun dato da mostrare", "layers") %}
+        Esegui una raccolta{% if selected or selected_rarity %}, oppure <a href="/">togli i filtri</a>{% endif %}.
+      {% endcall %}
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    {{ ui.panel_head("Cicli di raccolta", "refresh", runs | length) }}
+    {% if runs %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Inizio</th><th>Esito</th><th class="num">Set</th><th class="num">Carte</th><th class="num">Rilev.</th></tr>
+      </thead>
+      <tbody>
+        {% for row in runs %}
+        <tr>
+          <td class="sec">{{ row["started_at"] | when }}</td>
+          <td>
+            {% if row["status"] == "ok" %}
+              <span class="tag">{{ ui.icon("check", 11) }} ok</span>
+            {% else %}
+              <span class="tag warn" title="{{ row['error'] or '' }}">
+                {{ ui.icon("alert", 11) }} {{ row["status"] }}</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ row["expansions"] }}</td>
+          <td class="num">{{ row["cards_seen"] }}</td>
+          <td class="num">{{ row["snapshots_saved"] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessun ciclo registrato", "refresh") %}
+        Usa "Raccogli ora" in alto per il primo giro.
+      {% endcall %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

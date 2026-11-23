@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}{{ info["name"] if info else blueprint_id }} - PriceDrop{% endblock %}
+
+{% block content %}
+<div class="card-head">
+  {% if info and info["image_url"] %}
+    <img class="card-art" src="{{ info['image_url'] }}" loading="lazy"
+         referrerpolicy="no-referrer"
+         alt="Illustrazione della carta {{ info['name'] }}">
+  {% endif %}
+  <div class="card-head-main">
+    <h1>{{ info["name"] if info else "Carta " ~ blueprint_id }}</h1>
+    <p class="lede">
+      {% if info and info["expansion_name"] %}
+        {{ info["expansion_name"] }}
+        {% if info["expansion_code"] %}<span class="set-tag">{{ info["expansion_code"] }}</span>{% endif %}
+      {% else %}
+        Espansione non registrata
+      {% endif %}
+    </p>
+    <div class="row">
+      <form method="post" action="/watchlist/{{ blueprint_id }}">
+        <input type="hidden" name="back" value="/card/{{ blueprint_id }}">
+        <button type="submit" class="ghost">
+          {{ ui.icon("bookmark", 15) }}
+          {% if info and info["watched"] %}Togli dalla watchlist{% else %}Segui questa carta{% endif %}
+        </button>
+      </form>
+      <a class="btn ghost"
+         href="https://www.cardtrader.com/cards/{{ blueprint_id }}" target="_blank" rel="noopener noreferrer">
+        Apri su CardTrader
+      </a>
+    </div>
+  </div>
+</div>
+
+{% if latest %}
+<div class="kpi">
+  <div class="stat lead">
+    <div class="label">{{ ui.icon("down", 13) }} Prezzo minimo</div>
+    <div class="value">{{ latest["min_price_cents"] | euro }}</div>
+    <div class="note">{{ latest["currency"] }}, senza commissione Zero</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("chart", 13) }} Riferimento mercato</div>
+    <div class="value">{{ latest["reference_price_cents"] | euro }}</div>
+    <div class="note">mediana delle inserzioni successive</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("tag", 13) }} Scostamento</div>
+    <div class="value">-{{ latest["discount"] | percent }}</div>
+    <div class="note">risparmio {{ (latest["reference_price_cents"] - latest["min_price_cents"]) | euro }} EUR</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("layers", 13) }} Inserzioni</div>
+    <div class="value">{{ latest["eligible_count"] }}</div>
+    <div class="note">eleggibili CardTrader Zero</div>
+  </div>
+</div>
+{% else %}
+<div class="notice warn">
+  <span class="icon">{{ ui.icon("alert") }}</span>
+  <span>
+    <strong>Questa carta non ha rilevazioni.</strong>
+    Succede quando le inserzioni eleggibili sono troppo poche, oppure quando il
+    prezzo di riferimento resta sotto
+    {{ settings.outlier.min_reference_cents | euro }} EUR.
+  </span>
+</div>
+{% endif %}
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Andamento del prezzo", "chart", none,
+                   (history | length) ~ " rilevazioni") }}
+  <div class="panel-body">
+    <div class="chips" style="margin-bottom: 16px">
+      <span class="chips-label">Periodo</span>
+      {% for option in [7, 30, 90, 365] %}
+        <a href="/card/{{ blueprint_id }}?days={{ option }}"
+           class="chip {% if option == days %}on{% endif %}">{{ option }} giorni</a>
+      {% endfor %}
+    </div>
+    {{ chart | safe }}
+    <div class="legend">
+      <span><i class="swatch min"></i>Prezzo minimo</span>
+      <span><i class="swatch ref"></i>Riferimento mercato</span>
+    </div>
+  </div>
+  <div class="panel-note">
+    Passando il mouse su un punto della linea compaiono data, minimo e
+    riferimento di quella rilevazione.
+  </div>
+</div>
+</div>
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Aggiungi alla collezione", "wallet") }}
+  <div class="panel-body">
+    <form method="post" action="/collection/add" class="row" style="align-items: flex-end">
+      <input type="hidden" name="blueprint_id" value="{{ blueprint_id }}">
+      <input type="hidden" name="back" value="/card/{{ blueprint_id }}">
+      <label class="field">
+        Copie
+        <input type="text" name="quantity" value="1" style="min-width: 70px; width: 70px">
+      </label>
+      <label class="field">
+        Prezzo a copia
+        <input type="text" name="purchase_price" placeholder="12,50" style="min-width: 120px; width: 120px">
+      </label>
+      <label class="field">
+        Condizione
+        <input type="text" name="condition" placeholder="Near Mint" style="min-width: 130px; width: 130px">
+      </label>
+      <label class="field">
+        Data acquisto
+        <input type="text" name="acquired_at" placeholder="2026-11-22" style="min-width: 130px; width: 130px">
+      </label>
+      <label class="field">
+        Nota
+        <input type="text" name="note" placeholder="facoltativa" style="min-width: 160px">
+      </label>
+      <button type="submit">Aggiungi</button>
+    </form>
+  </div>
+  <div class="panel-note">
+    Ogni acquisto resta una riga a se: due copie comprate a prezzi diversi
+    vanno aggiunte separatamente, cosi il guadagno di ciascuna resta leggibile.
+  </div>
+</div>
+</div>
+
+<div class="section grid-2">
+  <div class="panel">
+    {{ ui.panel_head("Segnalazioni su questa carta", "bell", alerts | length) }}
+    {% if alerts %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Quando</th><th>Regola</th><th class="num">Prezzo</th><th class="num">Scost.</th><th>Venditore</th></tr>
+      </thead>
+      <tbody>
+        {% for row in alerts %}
+        <tr>
+          <td class="sec">{{ row["created_at"] | when }}</td>
+          <td>
+            {% if row["rule"] == "trend" %}
+              <span class="tag warn">{{ ui.icon("down", 11) }} trend</span>
+            {% else %}
+              <span class="tag quiet">{{ row["rule"] }}</span>
+            {% endif %}
+          </td>
+          <td class="num">{{ row["price_cents"] | euro }}</td>
+          <td class="num">-{{ row["discount_ratio"] | percent }}</td>
+          <td class="sec">{{ row["seller"] or "-" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessuna segnalazione su questa carta", "bell") %}
+        Nessun prezzo ha ancora superato le soglie impostate.
+      {% endcall %}
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    {{ ui.panel_head("Ultime rilevazioni", "clock", history | length) }}
+    {% if history %}
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Quando</th><th class="num">Minimo</th><th class="num">Riferimento</th><th class="num">Inserz.</th></tr>
+      </thead>
+      <tbody>
+        {% for row in history | reverse %}
+          {% if loop.index <= 20 %}
+          <tr>
+            <td class="sec">{{ row["taken_at"] | when }}</td>
+            <td class="num">{{ row["min_price_cents"] | euro }}</td>
+            <td class="num sec">{{ row["reference_price_cents"] | euro }}</td>
+            <td class="num sec">{{ row["eligible_count"] }}</td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessuna rilevazione nel periodo scelto", "clock") %}
+        Prova un periodo piu lungo, oppure esegui una raccolta.
+      {% endcall %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

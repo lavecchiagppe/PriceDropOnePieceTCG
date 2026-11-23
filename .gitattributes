@@ -1,0 +1,3 @@
+# Il database e un file binario: git non deve mai toccarne i fine riga.
+data/pricedrop.db binary
+*.db binary

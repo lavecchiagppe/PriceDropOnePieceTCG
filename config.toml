@@ -1,0 +1,84 @@
+# PriceDrop One Piece TCG — configurazione applicativa.
+# I segreti stanno in .env, non qui. Questo file si versiona.
+
+[provider]
+# Nome del provider attivo. L'unico implementato è "cardtrader".
+name = "cardtrader"
+# Lingua delle inserzioni, filtrata lato server dall'API.
+language = "en"
+
+[monitor]
+# Espansioni One Piece da monitorare, per codice CardTrader.
+# L'elenco completo con: python -m pricedrop sets
+# I codici non seguono una regola unica: eb05 e eb04 sono senza trattino,
+# eb-03 e eb-02 con il trattino. Copiali dall'elenco, non a memoria.
+expansion_codes = ["op19", "op18", "op17", "op16", "eb05"]
+# Alternativa esplicita per ID, se preferisci: ha precedenza sui codici.
+expansion_ids = []
+# Rarità storicizzate anche quando il prezzo di riferimento sta sotto
+# `min_reference_cents`: senza questo elenco le Super Rare da meno di un euro
+# venivano scartate insieme ai comuni, e la loro curva non partiva mai.
+# I valori sono quelli di CardTrader (`onepiece_rarity`). Attenzione:
+# "Alternate Art" per CardTrader è una rarità a sé, quindi una SR alternativa
+# NON risulta "Super Rare": è proprio ciò che permette di distinguerle.
+track_rarities = [
+  "Super Rare",
+  "Secret Rare",
+  "Special Rare",
+  "Treasure Rare",
+  "Alternate Art",
+]
+
+[filters]
+# Condizioni accettate, nella scala CardTrader.
+conditions = ["Near Mint", "Slightly Played"]
+# Considera solo inserzioni acquistabili via CardTrader Zero.
+require_cardtrader_zero = true
+# Escludi carte gradate (mercato non comparabile).
+exclude_graded = true
+
+[outlier]
+# Numero di inserzioni, dopo la più economica, usate per il prezzo di riferimento.
+reference_window = 5
+# Minimo di inserzioni eleggibili per considerare attendibile il confronto.
+min_comparables = 4
+# Scostamento minimo dal riferimento per generare un alert (0.35 = -35%).
+threshold = 0.35
+# Ignora le carte con prezzo di riferimento sotto questa soglia, in centesimi:
+# sulle carte da pochi centesimi ogni variazione è percentualmente enorme.
+min_reference_cents = 100
+# Risparmio minimo in valore assoluto perché valga un alert, in centesimi.
+# Tarato sui dati reali di OP-17: con la sola soglia percentuale i primi
+# quattro risultati erano carte da meno di 2 euro, dove un -70% vale 1,32 euro,
+# mentre il segnale vero era una carta a 800 contro un riferimento di 1250.
+min_saving_cents = 300
+
+[trend]
+# Regola secondaria: calo rispetto al passato recente della stessa carta.
+# Il confronto è contro la mediana dei prezzi minimi registrati nella finestra,
+# escluse le rilevazioni di oggi.
+window_days = 7
+threshold = 0.15
+# Punti storici minimi nella finestra perché il confronto abbia senso.
+# Finché lo storico non li raggiunge, la regola resta semplicemente inattiva.
+min_points = 5
+# Risparmio minimo in valore assoluto, in centesimi.
+min_saving_cents = 300
+
+[schedule]
+# Ciclo di raccolta automatico mentre la dashboard è in esecuzione.
+# Disattivato: la raccolta oraria la fa l'attività pianificata
+# PriceDropOnePieceTCG-Raccolta, che gira anche a dashboard chiusa e sveglia
+# il PC se è sospeso. Tenerlo acceso raddoppierebbe le chiamate all'API.
+# Rimettilo a true se togli quell'attività (scripts/disinstalla-autostart.ps1).
+enabled = false
+# Intervallo in minuti. Il minimo accettato è 5, per non martellare l'API.
+# Lo legge anche scripts/installa-autostart.ps1 per l'attività pianificata:
+# se lo cambi, rilancia quello script perché l'attività si aggiorni.
+interval_minutes = 15
+
+[notifications]
+# Toast di Windows quando il ciclo di raccolta gira su questo PC.
+desktop = true
+# Telegram si attiva da sé quando TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID
+# sono compilati in .env.

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Collezione - PriceDrop One Piece{% endblock %}
+
+{% block content %}
+<h1>Collezione</h1>
+<p class="lede">Le carte che possiedi, valutate al prezzo di riferimento.</p>
+
+{# Il guadagno e l'indicatore in evidenza: valore e costo servono a
+   spiegarlo, non a essere letti per primi. #}
+<div class="kpi">
+  <div class="stat lead">
+    <div class="label">{{ ui.icon(("up" if totals.pnl >= 0 else "down"), 13) }} Guadagno</div>
+    <div class="value">
+      {% if totals.pnl >= 0 %}+{% endif %}{{ totals.pnl | euro }}
+    </div>
+    <div class="note">
+      {% if totals.pnl_ratio is not none %}
+        {% if totals.pnl_ratio >= 0 %}+{% endif %}{{ totals.pnl_ratio | percent }} sul costo
+      {% else %}
+        nessun costo registrato
+      {% endif %}
+    </div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("wallet", 13) }} Valore attuale</div>
+    <div class="value">{{ totals.value_total | euro }}</div>
+    <div class="note">{{ totals.valued_copies }} copie valutate</div>
+  </div>
+  <div class="stat">
+    <div class="label">{{ ui.icon("tag", 13) }} Costo</div>
+    <div class="value">{{ totals.cost_total | euro }}</div>
+    <div class="note">{{ totals.copies }} copie in {{ totals.rows }} acquisti</div>
+  </div>
+</div>
+
+{% if totals.is_partial %}
+<div class="notice">
+  <span class="icon">{{ ui.icon("info") }}</span>
+  <span>
+    <strong>I totali non coprono tutto.</strong>
+    {% if totals.unvalued_rows %}
+      {{ totals.unvalued_rows }} righe non hanno una valutazione: la carta non ha
+      rilevazioni, perche il suo mercato e troppo sottile o il prezzo resta sotto
+      {{ settings.outlier.min_reference_cents | euro }} EUR.
+    {% endif %}
+    {% if totals.rows_without_cost %}
+      {{ totals.rows_without_cost }} righe non hanno prezzo di acquisto, quindi
+      non contribuiscono al costo ne al guadagno.
+    {% endif %}
+  </span>
+</div>
+{% endif %}
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Andamento del valore", "chart", none,
+                   points ~ " giorni rilevati") }}
+  <div class="panel-body">
+    <div class="chips" style="margin-bottom: 16px">
+      <span class="chips-label">Periodo</span>
+      {% for option in [7, 30, 90, 365] %}
+        <a href="/collection?days={{ option }}"
+           class="chip {% if option == days %}on{% endif %}">{{ option }} giorni</a>
+      {% endfor %}
+    </div>
+    {{ chart | safe }}
+    <div class="legend">
+      <span><i class="swatch min"></i>Valore della collezione</span>
+      <span><i class="swatch ref"></i>Costo totale</span>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Acquisti", "wallet", holdings | length,
+                   "ogni acquisto e una riga a se") }}
+  {% if holdings %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Carta</th>
+        <th>Set</th>
+        <th class="num">Copie</th>
+        <th class="num">Pagata</th>
+        <th class="num">Valore</th>
+        <th class="num">Guadagno</th>
+        <th>Acquisto</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in holdings %}
+      <tr>
+        <td>{{ ui.card_cell(item.blueprint_id, item.card_name, item.image_url, item.note) }}</td>
+        <td><span class="set-tag">{{ item.expansion_code or "?" }}</span></td>
+        <td class="num">{{ item.quantity }}</td>
+        <td class="num">
+          {% if item.has_cost %}{{ item.purchase_price_cents | euro }}{% else %}<span class="sec">-</span>{% endif %}
+        </td>
+        <td class="num">
+          {% if item.has_value %}
+            {{ item.value_total | euro }}
+            <div class="sec" style="font-size: 12px">{{ item.unit_value_cents | euro }} a copia</div>
+          {% else %}
+            <span class="sec">non valutata</span>
+          {% endif %}
+        </td>
+        <td class="num">
+          {% if item.pnl is not none %}
+            <span class="tag {% if item.pnl < 0 %}warn{% endif %}">
+              {{ ui.icon(("up" if item.pnl >= 0 else "down"), 11) }}
+              {% if item.pnl >= 0 %}+{% endif %}{{ item.pnl | euro }}
+            </span>
+            {% if item.pnl_ratio is not none %}
+            <div class="sec" style="font-size: 12px">
+              {% if item.pnl_ratio >= 0 %}+{% endif %}{{ item.pnl_ratio | percent }}
+            </div>
+            {% endif %}
+          {% else %}
+            <span class="sec">-</span>
+          {% endif %}
+        </td>
+        <td class="sec" style="font-size: 13px">
+          {{ item.acquired_at or "-" }}
+          {% if item.condition %}<div>{{ item.condition }}</div>{% endif %}
+        </td>
+        <td>
+          <form method="post" action="/collection/{{ item.id }}/update" class="row" style="gap: 6px; justify-content: flex-end">
+            <input type="text" name="quantity" value="{{ item.quantity }}" style="min-width: 54px; width: 54px" aria-label="Copie">
+            <input type="text" name="purchase_price"
+                   value="{% if item.has_cost %}{{ item.purchase_price_cents | euro }}{% endif %}"
+                   style="min-width: 86px; width: 86px" aria-label="Prezzo pagato per copia">
+            <button type="submit" class="ghost small">Salva</button>
+          </form>
+          <form method="post" action="/collection/{{ item.id }}/delete" style="text-align: right; margin-top: 4px">
+            <button type="submit" class="ghost small">Elimina</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state("Nessun acquisto registrato", "wallet") %}
+      Cerca una carta dalla pagina <a href="/search">Cerca</a>, aprila e usa il
+      modulo in fondo.
+    {% endcall %}
+  {% endif %}
+</div>
+</div>
+
+<div class="notice">
+  <span class="icon">{{ ui.icon("info") }}</span>
+  <span>
+    <strong>Come viene calcolato il valore.</strong>
+    Ogni copia vale il prezzo di riferimento della sua carta, cioe la mediana
+    delle inserzioni che seguono la piu economica. Non si usa il prezzo minimo:
+    quello e spesso una singola offerta anomala, e il totale ballerebbe a ogni
+    ciclo di raccolta. E una stima del mercato, non un prezzo di realizzo: in
+    vendita pagheresti commissioni e spedizione.
+  </span>
+</div>
+{% endblock %}

@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Watchlist - PriceDrop One Piece{% endblock %}
+
+{% block content %}
+<h1>Watchlist</h1>
+<p class="lede">
+  Le carte che segui, ordinate per scostamento dal riferimento.
+  {% if selected or selected_rarity %}
+    Filtrate per
+    {%- if selected %} <strong>{{ selected | upper }}</strong>{% endif %}
+    {%- if selected and selected_rarity %} e{% endif %}
+    {%- if selected_rarity %} <strong>{{ selected_rarity }}</strong>{% endif %}.
+  {% endif %}
+</p>
+
+{{ ui.filters("/watchlist", expansions, selected, rarities, selected_rarity) }}
+
+<div class="panel">
+  {{ ui.panel_head("Carte seguite", "bookmark", rows | length,
+                   "la soglia di segnalazione e -" ~ (settings.outlier.threshold | percent)) }}
+  {% if rows %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr>
+        <th>Carta</th>
+        <th>Set</th>
+        <th>Rarita</th>
+        <th class="num">Minimo</th>
+        <th class="num">Riferimento</th>
+        <th class="num">Scostamento</th>
+        <th>30 giorni</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ ui.card_cell(row["blueprint_id"], row["card_name"] or row["blueprint_id"], row["image_url"]) }}</td>
+        <td><span class="set-tag">{{ row["expansion_code"] or "?" }}</span></td>
+        <td class="sec">{{ row["rarity"] or "-" }}</td>
+        <td class="num">{{ row["min_price_cents"] | euro }}</td>
+        <td class="num sec">{{ row["reference_price_cents"] | euro }}</td>
+        <td class="num">
+          {% if row["discount"] >= settings.outlier.threshold %}
+            {{ ui.mag(row["discount"]) }}
+          {% else %}
+            <span class="sec" style="font-variant-numeric: tabular-nums">-{{ row["discount"] | percent }}</span>
+          {% endif %}
+        </td>
+        <td>{{ sparklines.get(row["blueprint_id"], "") | safe }}</td>
+        <td style="text-align: right">
+          <form method="post" action="/watchlist/{{ row['blueprint_id'] }}">
+            <input type="hidden" name="back" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+            <button type="submit" class="ghost small">Togli</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="panel-note">
+    La traccia dei 30 giorni e verde se il prezzo minimo e salito dal primo
+    all'ultimo punto, rossa se e scceso. La variazione esatta compare passando
+    il mouse sulla traccia.
+  </div>
+  {% else %}
+    {% call ui.empty_state("Nessuna carta seguita", "bookmark") %}
+      {% if selected or selected_rarity %}
+        Nessuna carta seguita con questi filtri:
+        <a href="/watchlist">guarda tutta la watchlist</a>.
+      {% else %}
+        Cercane una dalla pagina <a href="/search">Cerca</a> e usa il pulsante
+        "Segui questa carta".
+      {% endif %}
+    {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

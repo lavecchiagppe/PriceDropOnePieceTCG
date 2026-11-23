@@ -1,0 +1,35 @@
+# Segreti e configurazione locale
+.env
+.env.local
+*.key
+*.pem
+
+# Database e dati raccolti.
+# Il database fa eccezione: la raccolta automatica su GitHub Actions lo
+# ricommitta a ogni ciclo, ed e' li' che vive lo storico dei prezzi. I file
+# temporanei del journal, invece, non vanno mai versionati.
+data/*
+!data/pricedrop.db
+data/logs/
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor e sistema operativo
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

@@ -1,0 +1,10 @@
+[project]
+name = "pricedrop-onepiece"
+version = "0.1.0"
+description = "Monitoraggio prezzi e segnalazione occasioni per One Piece TCG su CardTrader"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-q"

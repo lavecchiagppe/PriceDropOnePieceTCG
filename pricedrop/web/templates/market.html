@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Mercato - PriceDrop One Piece{% endblock %}
+
+{% block content %}
+<h1>Mercato</h1>
+<p class="lede">
+  Come si stanno muovendo i prezzi nelle espansioni monitorate.
+  {% if selected or selected_rarity %}
+    Limitato a
+    {%- if selected %} <strong>{{ selected | upper }}</strong>{% endif %}
+    {%- if selected and selected_rarity %} e{% endif %}
+    {%- if selected_rarity %} <strong>{{ selected_rarity }}</strong>{% endif %}.
+  {% endif %}
+</p>
+
+{# I filtri stanno sopra tutto quello che governano: ogni riquadro della
+   pagina e calcolato sullo stesso periodo e sugli stessi filtri. #}
+<div class="chips">
+  <span class="chips-label">Periodo</span>
+  {% for option in [7, 30, 90, 365] %}
+    <a href="{{ filter_url('/market', selected, selected_rarity, {'days': option}) }}"
+       class="chip {% if option == days %}on{% endif %}">{{ option }} giorni</a>
+  {% endfor %}
+</div>
+
+{{ ui.filters("/market", expansions, selected, rarities, selected_rarity, {"days": days}) }}
+
+{% if not coverage.is_enough_for(days) %}
+<div class="notice warn">
+  <span class="icon">{{ ui.icon("alert") }}</span>
+  <span>
+    <strong>Storico insufficiente per questo periodo.</strong>
+    Ci sono {{ coverage.snapshots }} rilevazioni distribuite su
+    {{ coverage.distinct_days }} giorni, pari a
+    {{ "%.1f"|format(coverage.days) }} giorni di copertura. I prezzi passati non
+    sono recuperabili: questa pagina diventa affidabile man mano che la raccolta
+    automatica accumula giorni. Quello che vedi sotto e calcolato comunque, ma su
+    troppi pochi punti per concludere qualcosa.
+  </span>
+</div>
+{% else %}
+<div class="notice">
+  <span class="icon">{{ ui.icon("info") }}</span>
+  <span>
+    {{ coverage.snapshots }} rilevazioni su {{ coverage.cards }} carte, in
+    {{ coverage.distinct_days }} giorni di raccolta.
+  </span>
+</div>
+{% endif %}
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Indice di prezzo per espansione", "chart", none,
+                   "base 100 al primo giorno") }}
+  <div class="panel-body">
+    {{ index_chart | safe }}
+    {% if index_names %}
+    <div class="legend">
+      {% for name in index_names %}
+        <span><i class="key series-{{ loop.index0 % 4 }}"></i>{{ name | upper }}</span>
+      {% endfor %}
+      <span><i class="swatch ref"></i>base 100</span>
+    </div>
+    {% endif %}
+  </div>
+  <div class="panel-note">
+    Ogni carta pesa uguale: l'indice e la mediana delle variazioni, non la somma
+    dei prezzi, cosi una carta da 800 euro non domina il suo set. Entrano solo
+    le carte quotate anche il primo giorno.
+  </div>
+</div>
+</div>
+
+<div class="section grid-2">
+  <div class="panel">
+    {{ ui.panel_head("In salita", "up", risers | length) }}
+    {% if risers %}
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Carta</th><th class="num">Da</th><th class="num">A</th><th class="num">Var.</th></tr></thead>
+      <tbody>
+        {% for item in risers %}
+        <tr>
+          <td>{{ ui.card_cell(item.blueprint_id, item.card_name, item.image_url,
+                              ((item.expansion_code or "?") | upper) ~ " - " ~ item.points ~ " rilevazioni") }}</td>
+          <td class="num sec">{{ item.first_cents | euro }}</td>
+          <td class="num">{{ item.last_cents | euro }}</td>
+          <td class="num"><span class="tag">{{ ui.icon("up", 11) }} {{ item.change_ratio | percent }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessun rialzo rilevante nel periodo", "up") %}
+        Prova un periodo piu lungo.
+      {% endcall %}
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    {{ ui.panel_head("In discesa", "down", fallers | length) }}
+    {% if fallers %}
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>Carta</th><th class="num">Da</th><th class="num">A</th><th class="num">Var.</th></tr></thead>
+      <tbody>
+        {% for item in fallers %}
+        <tr>
+          <td>{{ ui.card_cell(item.blueprint_id, item.card_name, item.image_url,
+                              ((item.expansion_code or "?") | upper) ~ " - " ~ item.points ~ " rilevazioni") }}</td>
+          <td class="num sec">{{ item.first_cents | euro }}</td>
+          <td class="num">{{ item.last_cents | euro }}</td>
+          <td class="num"><span class="tag warn">{{ ui.icon("down", 11) }} {{ item.change_ratio | percent }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+      {% call ui.empty_state("Nessun calo rilevante nel periodo", "down") %}
+        Prova un periodo piu lungo.
+      {% endcall %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Offerta sul mercato", "layers", none,
+                   "inserzioni per carta, mediana giornaliera") }}
+  <div class="panel-body">{{ supply_chart | safe }}</div>
+  <div class="panel-note">
+    Quando l'offerta cresce i prezzi tendono a cedere poco dopo: e il segnale
+    che precede i cali, piu che seguirli.
+  </div>
+</div>
+</div>
+
+<div class="section">
+<div class="panel">
+  {{ ui.panel_head("Prezzi piu instabili", "alert", volatile | length,
+                   "oscillazione sul valore medio del periodo") }}
+  {% if volatile %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Carta</th><th>Set</th><th class="num">Media</th><th class="num">Oscillazione</th><th class="num">Minimo</th><th class="num">Massimo</th></tr>
+    </thead>
+    <tbody>
+      {% for item in volatile %}
+      <tr>
+        <td>{{ ui.card_cell(item.blueprint_id, item.card_name, item.image_url) }}</td>
+        <td><span class="set-tag">{{ item.expansion_code or "?" }}</span></td>
+        <td class="num">{{ item.mean_cents | euro }}</td>
+        <td class="num">{{ ui.mag(item.ratio, full=0.4, sign="") }}</td>
+        <td class="num sec">{{ item.low_cents | euro }}</td>
+        <td class="num sec">{{ item.high_cents | euro }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state("Dati non ancora sufficienti", "alert") %}
+      Servono almeno cinque rilevazioni per carta nel periodo scelto.
+    {% endcall %}
+  {% endif %}
+</div>
+</div>
+
+<div class="notice">
+  <span class="icon">{{ ui.icon("info") }}</span>
+  <span>
+    <strong>Che cosa misura questa pagina.</strong>
+    Tutto parte dal prezzo di riferimento, cioe la mediana delle inserzioni che
+    seguono la piu economica, e non dal prezzo minimo: il minimo e volatile per
+    costruzione, perche basta una singola offerta anomala a spostarlo. L'unica
+    eccezione sono i prezzi instabili qui sopra, che proprio quella volatilita
+    vogliono misurare.
+  </span>
+</div>
+{% endblock %}

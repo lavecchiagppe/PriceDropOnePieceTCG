@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% import "_macros.html" as ui %}
+{% block title %}Cerca - PriceDrop One Piece{% endblock %}
+
+{% block content %}
+<h1>Cerca una carta</h1>
+<p class="lede">Fra le carte delle espansioni monitorate.</p>
+
+<form method="get" action="/search" class="row" style="margin-bottom: 26px">
+  <input type="search" name="q" value="{{ term }}" placeholder="Nome della carta, es. Luffy"
+         aria-label="Nome della carta" autofocus>
+  <button type="submit">{{ ui.icon("search", 15) }} Cerca</button>
+</form>
+
+{% if term %}
+<div class="panel">
+  {{ ui.panel_head('Risultati per "' ~ term ~ '"', "search", results | length) }}
+  {% if results %}
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>Carta</th><th>Set</th><th style="text-align: right">Azione</th></tr>
+    </thead>
+    <tbody>
+      {% for row in results %}
+      <tr>
+        <td>{{ ui.card_cell(row["blueprint_id"], row["name"], row["image_url"]) }}</td>
+        <td><span class="set-tag">{{ row["expansion_code"] or "?" }}</span></td>
+        <td style="text-align: right">
+          <form method="post" action="/watchlist/{{ row['blueprint_id'] }}">
+            <input type="hidden" name="back" value="/search?q={{ term | urlencode }}">
+            <button type="submit" class="ghost small">Segui</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+    {% call ui.empty_state("Nessuna carta trovata", "search") %}
+      Niente corrisponde a "{{ term }}". Prova con una parte del nome, oppure
+      controlla che l'espansione sia fra quelle monitorate in config.toml.
+    {% endcall %}
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

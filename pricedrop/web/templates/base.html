@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>{% block title %}PriceDrop One Piece{% endblock %}</title>
+<style>
+  /* ---------------------------------------------------------------
+     Token di base. Un solo accento verde profondo su carta calda:
+     l'interfaccia resta silenziosa e i numeri sono la cosa piu
+     evidente della pagina.
+     --------------------------------------------------------------- */
+  :root {
+    --bg: #faf8f5;
+    --surface: #ffffff;
+    --surface-2: #f4f1ec;
+    --border: #e6e1d8;
+    --border-strong: #d6cfc2;
+
+    --text: #191714;
+    --text-2: #4f4a43;
+    --muted: #6a645b;
+
+    --accent: #0b6b58;
+    --accent-ink: #075043;
+    --accent-soft: #e4f1ec;
+    --on-accent: #ffffff;
+
+    --pos: #0b6b58;
+    --pos-soft: #e4f1ec;
+    --neg: #9d4024;
+    --neg-soft: #fae9e3;
+
+    /* Serie dei grafici: quattro tinte verificate per separazione
+       anche con visione dei colori ridotta. */
+    --chart-1: #118a6e;
+    --chart-2: #c2691a;
+    --chart-3: #4a5fd0;
+    --chart-4: #c22d6e;
+    --chart-grid: #ece7de;
+    --chart-fill: rgba(17, 138, 110, 0.12);
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --focus: #0b6b58;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141310;
+      --surface: #1d1c18;
+      --surface-2: #262420;
+      --border: #332f29;
+      --border-strong: #46413a;
+
+      --text: #f3f0ea;
+      --text-2: #c7c0b5;
+      --muted: #9d968b;
+
+      --accent: #4ec2a4;
+      --accent-ink: #7bd6bf;
+      --accent-soft: #19332c;
+      --on-accent: #0c1f1a;
+
+      --pos: #4ec2a4;
+      --pos-soft: #19332c;
+      --neg: #e4886c;
+      --neg-soft: #33211b;
+
+      --chart-1: #2aa98b;
+      --chart-2: #c9802f;
+      --chart-3: #7e8ce4;
+      --chart-4: #dd6693;
+      --chart-grid: #302c26;
+      --chart-fill: rgba(42, 169, 139, 0.16);
+
+      --focus: #4ec2a4;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scrollbar-color: var(--border-strong) var(--bg); }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.55 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Superfici che il browser disegnerebbe con i suoi default. */
+  ::selection { background: var(--accent-soft); color: var(--accent-ink); }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar { width: 11px; height: 11px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong); border-radius: 99px;
+    border: 3px solid var(--bg);
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px 72px; }
+
+  /* ---------------------------------------------------------------
+     Intestazione: resta in alto, perche la navigazione e "Raccogli
+     ora" servono anche a meta tabella.
+     --------------------------------------------------------------- */
+  header.top {
+    position: sticky; top: 0; z-index: 20;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 32px;
+  }
+  .top-inner {
+    max-width: 1120px; margin: 0 auto; padding: 12px 20px;
+    display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center;
+  }
+  .brand {
+    display: inline-flex; align-items: center; gap: 9px;
+    font-weight: 640; letter-spacing: -0.015em; margin-right: auto;
+  }
+  .brand a { color: var(--text); display: inline-flex; align-items: center; gap: 9px; }
+  .brand a:hover { text-decoration: none; }
+  .brand svg { color: var(--accent); flex: 0 0 auto; }
+
+  nav { display: flex; gap: 2px; flex-wrap: wrap; }
+  nav a {
+    color: var(--muted); font-size: 14px; font-weight: 500;
+    padding: 6px 11px; border-radius: 99px; line-height: 1.3;
+    transition: color 120ms ease, background-color 120ms ease;
+  }
+  nav a:hover { color: var(--text); background: var(--surface-2); text-decoration: none; }
+  nav a[aria-current="page"] {
+    color: var(--accent-ink); background: var(--accent-soft); font-weight: 600;
+  }
+
+  /* ---------------------------------------------------------------
+     Testo
+     --------------------------------------------------------------- */
+  h1 {
+    font-size: clamp(22px, 2.4vw, 27px); margin: 0 0 6px;
+    letter-spacing: -0.025em; font-weight: 650; line-height: 1.2;
+    text-wrap: balance;
+  }
+  h2 {
+    font-size: 15px; margin: 0; letter-spacing: -0.005em; font-weight: 620;
+  }
+  p.lede { color: var(--text-2); margin: 0 0 24px; max-width: 68ch; }
+
+  .section { margin-top: 36px; }
+
+  /* ---------------------------------------------------------------
+     Riquadri con intestazione: ogni blocco dice che cosa contiene e
+     quanto, cosi la pagina si legge scorrendo le sole intestazioni.
+     --------------------------------------------------------------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); overflow: hidden;
+  }
+  .panel.pad { padding: 18px; }
+  .panel-head {
+    display: flex; align-items: center; gap: 10px 14px; flex-wrap: wrap;
+    padding: 13px 18px; border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .panel-head .icon { color: var(--muted); flex: 0 0 auto; display: flex; }
+  .panel-head .meta {
+    margin-left: auto; color: var(--muted); font-size: 13px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .panel-body { padding: 18px; }
+  .panel-note {
+    padding: 12px 18px; border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 13px; background: var(--surface-2);
+  }
+  .panel-note strong { color: var(--text-2); font-weight: 600; }
+
+  .count {
+    font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 600;
+    color: var(--text-2); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 99px; padding: 1px 8px;
+  }
+
+  /* ---------------------------------------------------------------
+     Indicatori in alto
+     --------------------------------------------------------------- */
+  .kpi {
+    display: grid; gap: 12px; margin-bottom: 8px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .stat {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 15px 16px 16px;
+  }
+  .stat.lead { background: var(--accent-soft); border-color: transparent; }
+  .stat.lead .label, .stat.lead .note { color: var(--accent-ink); }
+  .stat.lead .value { color: var(--accent-ink); }
+  .stat .label {
+    display: flex; align-items: center; gap: 6px;
+    color: var(--muted); font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .stat .label svg { flex: 0 0 auto; }
+  .stat .value {
+    font-size: 27px; font-weight: 640; letter-spacing: -0.03em;
+    line-height: 1.15; margin-top: 7px;
+  }
+  .stat .value.small { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .stat .note { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+
+  /* ---------------------------------------------------------------
+     Tabelle
+     --------------------------------------------------------------- */
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { padding: 11px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  th {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.055em;
+    color: var(--muted); font-weight: 600; white-space: nowrap;
+    background: var(--surface);
+    border-bottom-color: var(--border-strong);
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.sec { color: var(--muted); }
+  tbody tr { transition: background-color 110ms ease; }
+  tbody tr:hover { background: var(--surface-2); }
+
+  /* ---------------------------------------------------------------
+     Pastiglie e etichette di stato
+     --------------------------------------------------------------- */
+  .tag {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 99px; white-space: nowrap;
+    font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums;
+    background: var(--pos-soft); color: var(--pos);
+  }
+  .tag.warn { background: var(--neg-soft); color: var(--neg); }
+  .tag.flat {
+    background: transparent; color: var(--muted);
+    border: 1px solid var(--border); font-weight: 500;
+  }
+  .tag.quiet { background: var(--surface-2); color: var(--text-2); }
+  .tag svg { flex: 0 0 auto; }
+
+  .set-tag {
+    display: inline-block; padding: 2px 7px; border-radius: 5px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.03em;
+    text-transform: uppercase; color: var(--text-2);
+    background: var(--surface-2); border: 1px solid var(--border);
+  }
+
+  /* ---------------------------------------------------------------
+     Barra di intensita: lo scostamento si legge prima come lunghezza
+     e poi come numero. Nessun dato in piu, solo piu veloce da leggere.
+     --------------------------------------------------------------- */
+  .mag { display: flex; align-items: center; gap: 9px; justify-content: flex-end; }
+  .mag .track {
+    width: 54px; height: 6px; border-radius: 99px;
+    background: var(--surface-2); overflow: hidden; flex: 0 0 54px;
+    border: 1px solid var(--border);
+  }
+  .mag .fill { display: block; height: 100%; background: var(--pos); border-radius: 99px; }
+  .mag .fill.warn { background: var(--neg); }
+  .mag .val { font-variant-numeric: tabular-nums; font-weight: 600; font-size: 13.5px; }
+
+  /* ---------------------------------------------------------------
+     Comandi
+     --------------------------------------------------------------- */
+  button, .btn {
+    font: inherit; font-size: 14px; font-weight: 550; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--accent); color: var(--on-accent); border: 1px solid transparent;
+    padding: 8px 14px; border-radius: var(--radius-sm); line-height: 1.3;
+    transition: filter 120ms ease, background-color 120ms ease;
+  }
+  button.ghost, .btn.ghost {
+    background: var(--surface); color: var(--text); border-color: var(--border-strong);
+  }
+  button.ghost:hover, .btn.ghost:hover { background: var(--surface-2); filter: none; }
+  button.small { padding: 4px 10px; font-size: 13px; }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; margin: 0 0 22px; align-items: center; }
+  .chips .chips-label { color: var(--muted); font-size: 12.5px; margin-right: 2px; }
+  .chip {
+    border: 1px solid var(--border); background: var(--surface);
+    color: var(--text-2); padding: 4px 11px; border-radius: 99px;
+    font-size: 13px; white-space: nowrap; font-weight: 500;
+    transition: border-color 120ms ease, color 120ms ease;
+  }
+  .chip:hover { color: var(--text); border-color: var(--border-strong); text-decoration: none; }
+  .chip .n { color: var(--muted); font-variant-numeric: tabular-nums; font-weight: 500; }
+  .chip.on {
+    background: var(--accent-soft); border-color: transparent;
+    color: var(--accent-ink); font-weight: 600;
+  }
+  .chip.on .n { color: var(--accent-ink); }
+
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grid-2 {
+    display: grid; gap: 20px; align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  }
+
+  .notice {
+    border: 1px solid var(--border); background: var(--surface);
+    border-radius: var(--radius); display: flex; gap: 11px;
+    padding: 13px 15px; margin: 20px 0; color: var(--text-2); font-size: 13.5px;
+  }
+  .notice strong { color: var(--text); font-weight: 600; }
+  .notice .icon { color: var(--accent); flex: 0 0 auto; margin-top: 1px; display: flex; }
+  .notice.warn { background: var(--neg-soft); border-color: transparent; }
+  .notice.warn .icon, .notice.warn strong { color: var(--neg); }
+
+  .empty { padding: 36px 20px; text-align: center; color: var(--muted); }
+  .empty .empty-title { color: var(--text); font-weight: 600; display: block; margin-bottom: 4px; }
+  .empty svg { color: var(--border-strong); margin-bottom: 10px; }
+
+  label.field {
+    display: flex; flex-direction: column; gap: 4px;
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  input[type="search"], input[type="text"] {
+    font: inherit; padding: 8px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
+    min-width: 240px; caret-color: var(--accent);
+    text-transform: none; letter-spacing: normal; font-weight: 400;
+  }
+  input::placeholder { color: var(--muted); }
+  input[type="search"]:focus, input[type="text"]:focus { border-color: var(--accent); }
+
+  /* ---------------------------------------------------------------
+     Grafici SVG generati lato server
+     --------------------------------------------------------------- */
+  .chart { display: block; max-width: 100%; }
+  .chart-grid { stroke: var(--chart-grid); stroke-width: 1; }
+  .chart-label { fill: var(--muted); font-size: 11px; font-family: inherit; font-variant-numeric: tabular-nums; }
+  .chart-value { fill: var(--text); font-size: 12px; font-weight: 600; font-family: inherit; font-variant-numeric: tabular-nums; }
+  .chart-area { fill: var(--chart-fill); stroke: none; }
+  .chart-minimum { fill: none; stroke: var(--chart-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart-minimum-dot { fill: var(--chart-1); stroke: var(--surface); stroke-width: 2; }
+  .chart-reference { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; opacity: 0.75; }
+  .chart-reference-dot { fill: var(--muted); }
+  .chart-hit { fill: transparent; }
+  .chart-hit:hover { fill: var(--chart-1); fill-opacity: 0.15; }
+
+  .chart-series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .series-0 { stroke: var(--chart-1); }
+  .series-1 { stroke: var(--chart-2); }
+  .series-2 { stroke: var(--chart-3); }
+  .series-3 { stroke: var(--chart-4); }
+  .chart-series-label { font-size: 11px; font-weight: 600; font-family: inherit; }
+  .label-0 { fill: var(--chart-1); }
+  .label-1 { fill: var(--chart-2); }
+  .label-2 { fill: var(--chart-3); }
+  .label-3 { fill: var(--chart-4); }
+
+  /* Un solo momento di movimento: le linee si disegnano all'apertura.
+     Senza animazione la linea e comunque visibile. */
+  @media (prefers-reduced-motion: no-preference) {
+    .chart-minimum, .chart-series {
+      animation: chart-draw 850ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    @keyframes chart-draw {
+      from { stroke-dasharray: 0 1; }
+      to { stroke-dasharray: 1 0; }
+    }
+  }
+
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-size: 13px; color: var(--text-2); margin-top: 12px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .key, .swatch { display: inline-block; width: 16px; height: 2px; border-radius: 2px; }
+  .key.series-0 { background: var(--chart-1); }
+  .key.series-1 { background: var(--chart-2); }
+  .key.series-2 { background: var(--chart-3); }
+  .key.series-3 { background: var(--chart-4); }
+  .swatch.min { background: var(--chart-1); }
+  .swatch.ref {
+    background: none; height: 0; border-top: 2px dashed var(--muted); width: 18px;
+  }
+
+  .sparkline { display: block; }
+  .spark-line { fill: none; stroke-width: 1.75; stroke-linejoin: round; stroke-linecap: round; }
+  .spark-line.up { stroke: var(--pos); }
+  .spark-line.down { stroke: var(--neg); }
+  .spark-dot.up { fill: var(--pos); }
+  .spark-dot.down { fill: var(--neg); }
+
+  /* ---------------------------------------------------------------
+     Carte
+     --------------------------------------------------------------- */
+  .card-cell { display: flex; align-items: center; gap: 11px; }
+  .card-cell .name { font-weight: 550; color: var(--text); }
+  .card-cell a.name:hover { color: var(--accent); }
+  .card-cell .sub { color: var(--muted); font-size: 12px; margin-top: 1px; }
+  .thumb {
+    width: 40px; height: 56px; flex: 0 0 40px;
+    border-radius: 5px; object-fit: cover; display: block;
+    background: var(--surface-2); border: 1px solid var(--border);
+  }
+  .thumb-empty { background: var(--surface-2); }
+
+  .card-art {
+    width: 230px; max-width: 100%; border-radius: var(--radius); display: block;
+    border: 1px solid var(--border); background: var(--surface-2);
+  }
+  .card-head { display: flex; gap: 26px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 26px; }
+  .card-head-main { flex: 1 1 320px; min-width: 280px; }
+
+  footer {
+    color: var(--muted); font-size: 13px; margin-top: 48px;
+    padding-top: 18px; border-top: 1px solid var(--border);
+    display: flex; gap: 8px; align-items: flex-start;
+  }
+  footer .icon { flex: 0 0 auto; margin-top: 1px; display: flex; }
+
+  @media (max-width: 620px) {
+    .top-inner { padding: 10px 16px; }
+    .wrap { padding: 0 16px 56px; }
+    .stat .value { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+{% set path = request.url.path %}
+<header class="top">
+  <div class="top-inner">
+    <span class="brand">
+      <a href="/">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <rect x="1.5" y="1.5" width="17" height="17" rx="5" stroke="currentColor" stroke-width="1.6"/>
+          <path d="M4.8 7.3l3.4 3.4 2.2-2.2 4.2 4.2" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M14.6 9.4v3.2h-3.2" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        PriceDrop One Piece
+      </a>
+    </span>
+    <nav>
+      <a href="/"{% if path == "/" %} aria-current="page"{% endif %}>Dashboard</a>
+      <a href="/watchlist"{% if path.startswith("/watchlist") %} aria-current="page"{% endif %}>Watchlist</a>
+      <a href="/collection"{% if path.startswith("/collection") %} aria-current="page"{% endif %}>Collezione</a>
+      <a href="/market"{% if path.startswith("/market") %} aria-current="page"{% endif %}>Mercato</a>
+      <a href="/search"{% if path.startswith("/search") %} aria-current="page"{% endif %}>Cerca</a>
+    </nav>
+    <form method="post" action="/collect">
+      {# Il filtro attivo va conservato: dopo la raccolta si torna alla stessa vista. #}
+      <input type="hidden" name="back" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+      <button type="submit">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+          <path d="M14 8a6 6 0 1 1-1.76-4.24M14 2.2v3.4h-3.4" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Raccogli ora
+      </button>
+    </form>
+  </div>
+</header>
+
+<div class="wrap">
+{% block content %}{% endblock %}
+
+<footer>
+  <span class="icon">
+    <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.5"/>
+      <path d="M8 4.6V8l2.4 1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+  </span>
+  <span>
+    {% if scheduler.enabled %}
+      Raccolta automatica ogni {{ scheduler.interval_minutes }} minuti.
+      {% if scheduler.next_run_at %}Prossima intorno alle {{ scheduler.next_run_at | when }}.{% endif %}
+    {% else %}
+      Raccolta automatica disattivata in config.toml.
+    {% endif %}
+    {% if scheduler.state.error %}
+      <br><span style="color: var(--neg)">Ultimo ciclo non riuscito: {{ scheduler.state.error }}</span>
+    {% endif %}
+  </span>
+</footer>
+</div>
+</body>
+</html>
