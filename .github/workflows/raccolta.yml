@@ -4,34 +4,47 @@
 # si impostano una volta in Settings -> Secrets and variables -> Actions
 # del repository, e il workflow li legge come variabili d'ambiente.
 #
+# PERCHE' IL JOB SI DA' LA FREQUENZA DA SOLO.
+#
+# La prima versione usava `cron: */5`, il minimo consentito. GitHub lo ha
+# semplicemente ignorato: workflow attivo, cron valido, Actions abilitato, e
+# in cinquanta minuti nemmeno un run pianificato. E' un comportamento noto e
+# documentato: i run `schedule` sono "best effort", vengono accodati e sotto
+# carico scartati, e gli intervalli brevi sono i primi a saltare.
+#
+# Quindi il cron chiede poco e il job fa il resto: parte ogni 15 minuti, e
+# dentro allo stesso job raccoglie tre volte a 5 minuti di distanza. Le
+# rilevazioni restano una ogni 5 minuti, ma dipendono da un terzo delle
+# occasioni di essere ritardate o saltate. Le attese dentro al job non
+# costano nulla: su repository pubblico i minuti sono illimitati.
+#
 # DOVE VIVE IL DATABASE, e perche' non su main.
 #
 # Lo storico deve sopravvivere fra un ciclo e l'altro, altrimenti ogni run
 # ripartirebbe da zero: la regola di calo nel tempo non si accenderebbe mai e
-# le stesse segnalazioni verrebbero rimandate in continuazione. La prima
-# versione di questo workflow lo committava su main a ogni ciclo, ed era
-# insostenibile: git non sa fare delta fra due versioni di un file SQLite,
-# quindi ogni commit ristorava il file intero (circa 275 KB compressi). A
-# 5 minuti sono 288 commit al giorno, e la cronologia del repository avrebbe
-# superato i limiti di GitHub in pochi giorni.
+# le stesse segnalazioni verrebbero rimandate in continuazione. Committarlo su
+# main a ogni ciclo, come faceva la prima versione, era insostenibile: git non
+# sa fare delta fra due file SQLite, quindi ogni commit ristora il file intero
+# (~275 KB compressi).
 #
-# Ora il file viaggia su tre binari, con ruoli diversi:
+# Il file viaggia su tre binari, con ruoli distinti:
 #
-#   1. cache di Actions  -> continuita' fra un ciclo e il successivo
-#   2. artifact del run  -> da qui il PC si allinea (python -m pricedrop sync)
+#   1. cache di Actions  -> continuita' fra un run e il successivo
+#   2. artifact          -> riscritto a ogni rilevazione; da qui si allinea
+#                           il PC con `python -m pricedrop sync`
 #   3. branch "dati"     -> copia durevole, un commit al giorno
 #
-# La cronologia git cresce cosi' di un commit al giorno invece di 288, e su un
-# branch separato: main non contiene il database, quindi la dashboard locale
-# puo' scriverci senza che git pull vada in conflitto a ogni giro.
+# Su main il database non c'e': la dashboard locale ci scrive, e un file
+# versionato manderebbe in conflitto ogni git pull.
 name: Raccolta prezzi
 
 on:
   schedule:
-    # Ogni 5 minuti: e' il minimo consentito da GitHub. Resta "best effort",
-    # quindi nelle ore di punta un ciclo puo' partire in ritardo o essere
-    # saltato: i cicli effettivi sono meno di 288 al giorno.
-    - cron: "*/5 * * * *"
+    # Un quarto d'ora e' un intervallo che lo scheduler onora molto piu'
+    # volentieri di `*/5`. Le tre rilevazioni le fa il job.
+    # Il minuto 3 invece di 0: all'inizio dell'ora la coda di GitHub e' piu'
+    # affollata, ed e' il consiglio della documentazione per ridurre i ritardi.
+    - cron: "3,18,33,48 * * * *"
   # Permette di lanciare una raccolta a mano dalla tab Actions.
   workflow_dispatch:
 
@@ -39,20 +52,31 @@ on:
 permissions:
   contents: write
 
-# Due raccolte in parallelo sprecherebbero chiamate API e si scontrerebbero
-# sulla cache: i cicli si mettono in coda invece di sovrapporsi.
+# Due run in parallelo sprecherebbero chiamate API e si scontrerebbero sulla
+# cache: si mettono in coda invece di sovrapporsi. Il job dura circa 11
+# minuti, quindi sta comodamente dentro il quarto d'ora.
 concurrency:
   group: raccolta
   cancel-in-progress: false
 
-env:
-  DB: data/pricedrop.db
-  BRANCH_DATI: dati
-
 jobs:
   raccolta:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+
+    # L'env del job: gli step, comprese le azioni composite, lo ereditano.
+    env:
+      DB: data/pricedrop.db
+      BRANCH_DATI: dati
+      CARDTRADER_API_TOKEN: ${{ secrets.CARDTRADER_API_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      SMTP_HOST: ${{ secrets.SMTP_HOST }}
+      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
 
     steps:
       - name: Scarica il repository
@@ -78,9 +102,9 @@ jobs:
           restore-keys: |
             database-
 
-      # Se la cache e' stata sfrattata (succede dopo 7 giorni di inattivita', o
-      # oltre i 10 GB per repository) lo storico si recupera dal branch dati,
-      # perdendo al massimo i cicli della giornata in corso.
+      # Se la cache e' stata sfrattata (dopo 7 giorni di inattivita', o oltre i
+      # 10 GB per repository) lo storico si recupera dal branch dati, perdendo
+      # al massimo i cicli della giornata in corso.
       - name: Recupera lo storico dal branch dati
         if: steps.cache.outputs.cache-matched-key == ''
         run: |
@@ -96,47 +120,36 @@ jobs:
             echo "Nessun branch $BRANCH_DATI: si parte da zero."
           fi
 
-      - name: Raccogli i prezzi e invia le notifiche
-        env:
-          CARDTRADER_API_TOKEN: ${{ secrets.CARDTRADER_API_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-          DATABASE_PATH: ${{ env.DB }}
-        run: python -m pricedrop collect
-
-      - name: Consolida il database
-        # Il database usa il journal WAL: il checkpoint riversa tutto nel file
-        # principale, cosi' artifact e cache contengono davvero i dati
-        # dell'ultimo ciclo.
-        run: |
-          python - <<'PY'
-          import os, sqlite3
-          conn = sqlite3.connect(os.environ["DB"])
-          conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
-          conn.close()
-          PY
-
-      # Da qui si allinea il PC: `python -m pricedrop sync` scarica l'artifact
-      # dell'ultimo ciclo riuscito. Gli artifact non pesano sulla cronologia
-      # git, e su repository pubblico lo spazio e' gratuito.
-      - name: Pubblica il database come artifact
-        uses: actions/upload-artifact@v4
+      - name: Rilevazione 1 di 3
+        uses: ./.github/actions/raccogli
         with:
-          name: database
-          path: ${{ env.DB }}
-          # Una settimana basta: serve solo come punto di scarico recente.
-          retention-days: 7
-          compression-level: 9
-          overwrite: true
+          database: ${{ env.DB }}
+
+      - name: Attendi 5 minuti
+        run: sleep 300
+
+      - name: Rilevazione 2 di 3
+        uses: ./.github/actions/raccogli
+        with:
+          database: ${{ env.DB }}
+
+      - name: Attendi 5 minuti
+        run: sleep 300
+
+      - name: Rilevazione 3 di 3
+        uses: ./.github/actions/raccogli
+        with:
+          database: ${{ env.DB }}
 
       - name: Aggiorna la copia durevole, una volta al giorno
+        # Gira anche se una rilevazione e' fallita: meglio salvare lo storico
+        # raccolto fin li' che perdere la giornata per un errore di rete.
+        if: always()
         run: |
+          if [ ! -f "$DB" ]; then
+            echo "Nessun database da salvare."
+            exit 0
+          fi
           oggi=$(date -u '+%Y-%m-%d')
           git fetch origin "$BRANCH_DATI" 2>/dev/null || true
           ultimo=""
@@ -150,8 +163,8 @@ jobs:
           echo "Aggiorno il branch $BRANCH_DATI per il giorno $oggi."
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Il branch dati tiene un solo commit: non serve la storia di tutti i
-          # giorni, serve l'ultima copia buona. Un branch orfano ricreato ogni
+          # Il branch dati tiene un solo commit: serve l'ultima copia buona,
+          # non la storia di tutti i giorni. Un branch orfano ricreato ogni
           # volta tiene il repository piccolo per sempre.
           git checkout --orphan "$BRANCH_DATI"
           git reset

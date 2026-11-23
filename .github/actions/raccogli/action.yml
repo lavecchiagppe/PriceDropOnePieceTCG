@@ -1,0 +1,51 @@
+# Un ciclo di raccolta completo: rileva i prezzi, consolida il database e lo
+# pubblica come artifact.
+#
+# Esiste come azione separata perche' il workflow la richiama piu' volte nello
+# stesso job. Il motivo sta in raccolta.yml: lo scheduler di GitHub non onora
+# un cron ogni 5 minuti, quindi la frequenza se la da' il job da solo.
+#
+# I segreti non sono fra gli input: stanno nell'env del job, che gli step di
+# un'azione composita ereditano. Cosi' non vanno elencati due volte.
+name: Raccogli
+description: Un ciclo di raccolta, consolidamento del database e pubblicazione.
+
+inputs:
+  database:
+    description: Percorso del database SQLite.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Rileva i prezzi e invia le notifiche
+      shell: bash
+      env:
+        DATABASE_PATH: ${{ inputs.database }}
+      run: python -m pricedrop collect
+
+    - name: Consolida il database
+      # Il journal WAL tiene le scritture in un file a parte: senza checkpoint
+      # l'artifact conterrebbe un database senza i dati appena raccolti.
+      shell: bash
+      env:
+        DATABASE_PATH: ${{ inputs.database }}
+      run: |
+        python - <<'PY'
+        import os, sqlite3
+        conn = sqlite3.connect(os.environ["DATABASE_PATH"])
+        conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        conn.close()
+        PY
+
+    # Da qui si allinea il PC. `overwrite` sostituisce l'artifact del giro
+    # precedente dentro lo stesso run: il nome resta sempre "database", e chi
+    # scarica trova l'ultima rilevazione senza dover indovinare un suffisso.
+    - name: Pubblica il database come artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: database
+        path: ${{ inputs.database }}
+        retention-days: 7
+        compression-level: 9
+        overwrite: true

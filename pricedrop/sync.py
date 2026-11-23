@@ -28,6 +28,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -39,7 +40,6 @@ logger = logging.getLogger(__name__)
 # Nome dell'artifact caricato dal workflow e del file che contiene.
 ARTIFACT_NAME = "database"
 DATABASE_FILENAME = "pricedrop.db"
-WORKFLOW_NAME = "Raccolta prezzi"
 
 # Attesa massima per i comandi gh: la rete puo' essere lenta, ma oltre questo
 # conviene arrendersi e lasciare la dashboard navigabile sui dati che ha.
@@ -126,49 +126,96 @@ def _run_gh(args: list[str]) -> str:
     return completed.stdout
 
 
-def latest_successful_run() -> tuple[int, str]:
-    """Id e orario dell'ultimo ciclo di raccolta riuscito nel cloud."""
+def _run_gh_binary(args: list[str], destination: Path) -> None:
+    """Come _run_gh, ma scrive su file l'uscita binaria del comando."""
+    gh = shutil.which("gh")
+    if gh is None:
+        raise SyncError(
+            "Non trovo il comando gh. Installa GitHub CLI (cli.github.com) "
+            "e autenticati con: gh auth login"
+        )
+    try:
+        completed = subprocess.run(
+            [gh, *args],
+            capture_output=True,
+            timeout=COMMAND_TIMEOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise SyncError(
+            f"gh non ha risposto entro {COMMAND_TIMEOUT:.0f} secondi."
+        ) from exc
+    if completed.returncode != 0:
+        dettaglio = completed.stderr.decode("utf-8", "replace").strip()
+        prima_riga = dettaglio.splitlines()[0] if dettaglio else "errore sconosciuto"
+        raise SyncError(f"gh ha risposto con un errore: {prima_riga}")
+    destination.write_bytes(completed.stdout)
+
+
+def repository_slug() -> str:
+    """Il repository GitHub a cui e' collegata questa cartella."""
+    raw = _run_gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"])
+    slug = raw.strip()
+    if not slug:
+        raise SyncError("gh non sa dire a quale repository GitHub appartiene questa cartella.")
+    return slug
+
+
+def latest_artifact() -> tuple[int, str, int]:
+    """Id, orario e run dell'artifact piu' recente col database.
+
+    Si interroga l'elenco degli artifact invece dei run perche' il workflow
+    ne pubblica uno a ogni rilevazione, e un run dura un quarto d'ora: le
+    rilevazioni intermedie sono gia' scaricabili mentre il run e' ancora in
+    corso. Guardare solo i run conclusi significherebbe aspettare la fine del
+    job per vedere dati raccolti dieci minuti prima.
+    """
+    slug = repository_slug()
     raw = _run_gh(
         [
-            "run",
-            "list",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--status",
-            "success",
-            "--limit",
-            "1",
-            "--json",
-            "databaseId,createdAt",
+            "api",
+            f"repos/{slug}/actions/artifacts?name={ARTIFACT_NAME}&per_page=1",
+            "--jq",
+            ".artifacts[0] // empty",
         ]
     )
+    if not raw.strip():
+        raise SyncError(
+            "Nessun database pubblicato nel cloud: controlla la tab Actions "
+            "del repository."
+        )
     try:
-        righe = json.loads(raw or "[]")
+        artifact = json.loads(raw)
     except json.JSONDecodeError as exc:
         raise SyncError("Risposta di gh non leggibile.") from exc
-    if not righe:
+
+    if artifact.get("expired"):
         raise SyncError(
-            "Nessun ciclo di raccolta riuscito nel cloud: controlla la tab "
-            "Actions del repository."
+            "L'ultimo database pubblicato e' scaduto: lancia una raccolta "
+            "dalla tab Actions del repository."
         )
-    prima = righe[0]
-    return int(prima["databaseId"]), str(prima.get("createdAt") or "")
-
-
-def download_cloud_database(run_id: int, destination: Path) -> Path:
-    """Scarica il database pubblicato da un ciclo, in una cartella di lavoro."""
-    destination.mkdir(parents=True, exist_ok=True)
-    _run_gh(
-        [
-            "run",
-            "download",
-            str(run_id),
-            "--name",
-            ARTIFACT_NAME,
-            "--dir",
-            str(destination),
-        ]
+    run = artifact.get("workflow_run") or {}
+    return (
+        int(artifact["id"]),
+        str(artifact.get("created_at") or ""),
+        int(run.get("id") or 0),
     )
+
+
+def download_cloud_database(artifact_id: int, destination: Path) -> Path:
+    """Scarica ed estrae l'artifact, restituendo il database che contiene."""
+    destination.mkdir(parents=True, exist_ok=True)
+    slug = repository_slug()
+    archivio = destination / "database.zip"
+    _run_gh_binary(
+        ["api", f"repos/{slug}/actions/artifacts/{artifact_id}/zip"], archivio
+    )
+    try:
+        with zipfile.ZipFile(archivio) as zip_file:
+            zip_file.extractall(destination)
+    except zipfile.BadZipFile as exc:
+        raise SyncError("L'archivio scaricato non e' leggibile.") from exc
+
     scaricato = destination / DATABASE_FILENAME
     if not scaricato.exists():
         # L'artifact potrebbe contenere il file con un altro nome: si prende
@@ -297,9 +344,9 @@ class CloudSync:
             self.state.last_attempt_at = db.utcnow()
             self._last_attempt = time.monotonic()
             try:
-                run_id, run_at = latest_successful_run()
+                artifact_id, run_at, run_id = latest_artifact()
                 with tempfile.TemporaryDirectory(prefix="pricedrop-sync-") as tmp:
-                    scaricato = download_cloud_database(run_id, Path(tmp))
+                    scaricato = download_cloud_database(artifact_id, Path(tmp))
                     risultato = merge_cloud_into_local(
                         self._settings.database_path, scaricato
                     )

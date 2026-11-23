@@ -75,9 +75,9 @@ Due strade, alternative fra loro:
 - **Su questo PC**, con due attivita' pianificate di Windows (la sezione qui
   sotto). Richiede che il PC sia acceso o sospeso, con la rete disponibile.
 - **Online su GitHub Actions**, a PC spento: vedi [CLOUD.md](CLOUD.md). La
-  raccolta gira sui server di GitHub ogni 5 minuti, con le notifiche email e
-  Telegram; la dashboard resta locale e si allinea da se' a ogni visita, o col
-  pulsante "Aggiorna dal cloud".
+  raccolta gira sui server di GitHub, una rilevazione ogni 5 minuti, con le
+  notifiche email e Telegram; la dashboard resta locale e si allinea da se' a
+  ogni visita, o col pulsante "Aggiorna dal cloud".
 
 ### Sul PC: attivita' pianificate di Windows
 

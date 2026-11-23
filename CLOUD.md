@@ -8,7 +8,7 @@ Cosa cambia rispetto a ora:
 
 | | Sul PC | Su GitHub Actions |
 |---|---|---|
-| Raccolta prezzi | attivita pianificata di Windows | workflow `.github/workflows/raccolta.yml`, ogni 5 minuti |
+| Raccolta prezzi | attivita pianificata di Windows | workflow `.github/workflows/raccolta.yml`, una rilevazione ogni 5 minuti |
 | Notifiche email e Telegram | si | si, identiche |
 | Toast di Windows | si | no: i runner sono Linux, il canale si disattiva da se |
 | Storico prezzi | `data/pricedrop.db` locale | cache fra i cicli, artifact a ogni ciclo, branch `dati` una volta al giorno |
@@ -18,8 +18,9 @@ Cosa cambia rispetto a ora:
 
 I minuti di GitHub Actions sono illimitati sui repository pubblici, mentre su
 quelli privati il piano gratuito ne da 2000 al mese. Un ciclo ogni 5 minuti
-sono fino a 8600 esecuzioni al mese: su un repository privato la quota
-finirebbe in pochi giorni.
+sono fino a 8600 rilevazioni al mese, e il job resta acceso mentre aspetta fra
+una e l'altra: su un repository privato la quota finirebbe in un paio di
+giorni.
 
 Pubblico significa che **il codice** e **lo storico dei prezzi** sono visibili a
 chiunque. I segreti no: token CardTrader, password SMTP e credenziali Telegram
@@ -29,12 +30,28 @@ Il file `.env` resta escluso da git (`.gitignore`).
 Se un domani preferisci il repository privato, basta alzare l'intervallo nel
 cron del workflow: `0 * * * *` (ogni ora) sta comodamente nella quota.
 
-## Ogni quanto, e perche 5 minuti e il minimo
+## Ogni quanto, e perche il job si da la frequenza da solo
 
-Il cron di GitHub non scende sotto i 5 minuti: e il limite della piattaforma,
-non una scelta. Ed e "best effort": nelle ore di punta un ciclo puo partire in
-ritardo o essere saltato, quindi i cicli veri sono meno dei 288 teorici al
-giorno.
+Le rilevazioni sono una ogni 5 minuti, ma **non** e il cron a scandirle.
+
+La prima versione usava `cron: */5`, il minimo consentito da GitHub. Non ha
+funzionato: workflow attivo, cron valido, Actions abilitato, e in cinquanta
+minuti nemmeno un run pianificato. Non era un errore di configurazione, e un
+comportamento noto: i run `schedule` sono dichiaratamente "best effort",
+vengono accodati e sotto carico scartati, e gli intervalli brevi sono i primi
+a saltare.
+
+Ora il cron chiede poco e il job fa il resto: parte quattro volte all'ora (ai
+minuti 3, 18, 33 e 48, lontano dall'inizio dell'ora dove la coda di GitHub e
+piu affollata) e dentro allo stesso job raccoglie **tre volte, a 5 minuti di
+distanza**. La frequenza delle rilevazioni resta quella, ma dipende da un
+terzo delle occasioni di essere ritardata. Le attese dentro al job non costano
+nulla: su repository pubblico i minuti sono illimitati.
+
+Il ciclo singolo sta in `.github/actions/raccogli/action.yml`, richiamato tre
+volte da `raccolta.yml`: raccoglie, consolida il database e ripubblica
+l'artifact. Cosi' il PC puo allinearsi gia' a meta' job, senza aspettare che
+finisca.
 
 Il vincolo che resta non sono i minuti ma l'API di CardTrader: un ciclo fa una
 trentina di chiamate (le espansioni, i listing di ogni set, le riverifiche),
@@ -61,7 +78,7 @@ Ora il file viaggia su tre binari, con ruoli distinti:
 | Binario | A cosa serve | Costo |
 |---|---|---|
 | Cache di Actions | passa il database da un ciclo al successivo | nessuno sulla cronologia git |
-| Artifact del run | da qui si allinea il PC | nessuno; su repo pubblico lo spazio e gratuito |
+| Artifact | riscritto a ogni rilevazione; da qui si allinea il PC | nessuno; su repo pubblico lo spazio e gratuito |
 | Branch `dati` | copia durevole se la cache viene sfrattata | un commit al giorno, ~275 KB |
 
 Il branch `dati` tiene **un solo commit**: viene ricreato ogni volta come branch
@@ -157,8 +174,11 @@ quanti snapshot ha portato, e l'eventuale motivo di un fallimento.
 
 ### Come funziona
 
-Il sync scarica l'artifact dell'ultimo ciclo riuscito tramite la CLI `gh`, che
-sul PC e' gia' autenticata: nessun token da incollare da qualche parte. Poi
+Il sync scarica l'artifact piu' recente tramite la CLI `gh`, che sul PC e' gia'
+autenticata: nessun token da incollare da qualche parte. Guarda l'elenco degli
+artifact, non quello dei run conclusi: il workflow ne ripubblica uno a ogni
+rilevazione, quindi le rilevazioni intermedie sono scaricabili mentre il job e'
+ancora in corso. Poi
 **travasa** nel database locale le righe che mancano, riconoscendole dalla loro
 chiave naturale (per gli snapshot la coppia carta + istante, per le
 segnalazioni il fingerprint). Non sovrascrive il file e non cancella niente.
