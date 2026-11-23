@@ -161,6 +161,32 @@ def repository_slug() -> str:
     return slug
 
 
+def pick_newest(artifacts: list[dict]) -> dict:
+    """Sceglie l'artifact piu' recente fra quelli ancora scaricabili.
+
+    Non si puo' prendere il primo dell'elenco: l'API di GitHub non lo ordina
+    per data, e nemmeno gli id crescono col tempo. Visto dal vivo, un artifact
+    delle 21:13 arrivava prima di uno delle 21:15, con id piu' alto. Fidarsi
+    dell'ordine significava allineare la dashboard a una rilevazione piu'
+    vecchia di quella disponibile.
+
+    Le date sono ISO 8601 in UTC, tutte nello stesso formato, quindi il
+    confronto fra stringhe equivale a quello fra istanti.
+    """
+    validi = [a for a in artifacts if not a.get("expired")]
+    if not validi:
+        if artifacts:
+            raise SyncError(
+                "I database pubblicati nel cloud sono scaduti: lancia una "
+                "raccolta dalla tab Actions del repository."
+            )
+        raise SyncError(
+            "Nessun database pubblicato nel cloud: controlla la tab Actions "
+            "del repository."
+        )
+    return max(validi, key=lambda a: str(a.get("created_at") or ""))
+
+
 def latest_artifact() -> tuple[int, str, int]:
     """Id, orario e run dell'artifact piu' recente col database.
 
@@ -174,26 +200,17 @@ def latest_artifact() -> tuple[int, str, int]:
     raw = _run_gh(
         [
             "api",
-            f"repos/{slug}/actions/artifacts?name={ARTIFACT_NAME}&per_page=1",
+            f"repos/{slug}/actions/artifacts?name={ARTIFACT_NAME}&per_page=20",
             "--jq",
-            ".artifacts[0] // empty",
+            ".artifacts",
         ]
     )
-    if not raw.strip():
-        raise SyncError(
-            "Nessun database pubblicato nel cloud: controlla la tab Actions "
-            "del repository."
-        )
     try:
-        artifact = json.loads(raw)
+        elenco = json.loads(raw or "[]")
     except json.JSONDecodeError as exc:
         raise SyncError("Risposta di gh non leggibile.") from exc
 
-    if artifact.get("expired"):
-        raise SyncError(
-            "L'ultimo database pubblicato e' scaduto: lancia una raccolta "
-            "dalla tab Actions del repository."
-        )
+    artifact = pick_newest(elenco)
     run = artifact.get("workflow_run") or {}
     return (
         int(artifact["id"]),

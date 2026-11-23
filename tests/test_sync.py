@@ -274,3 +274,43 @@ def test_il_pulsante_non_rompe_la_pagina_se_il_sync_fallisce(
 
     assert risposta.status_code == 200
     assert "Allineamento non riuscito" in risposta.text
+
+
+def test_sceglie_l_artifact_piu_recente_non_il_primo() -> None:
+    """L'API di GitHub non ordina gli artifact per data.
+
+    Caso reale: l'artifact delle 21:13 arrivava prima di quello delle 21:15,
+    e aveva pure l'id piu' alto. Prendere il primo dell'elenco allineava la
+    dashboard a una rilevazione piu' vecchia di quella disponibile.
+    """
+    from pricedrop.sync import pick_newest
+
+    elenco = [
+        {"id": 14863601936, "created_at": "2026-11-23T21:13:26Z"},
+        {"id": 14862473644, "created_at": "2026-11-23T21:15:02Z"},
+        {"id": 14841000302, "created_at": "2026-11-23T16:47:04Z"},
+    ]
+
+    assert pick_newest(elenco)["id"] == 14862473644
+
+
+def test_ignora_gli_artifact_scaduti() -> None:
+    """Dopo la scadenza il file non c'e' piu', solo la riga nell'elenco."""
+    from pricedrop.sync import pick_newest
+
+    elenco = [
+        {"id": 2, "created_at": "2026-11-23T21:15:02Z", "expired": True},
+        {"id": 1, "created_at": "2026-11-20T10:00:00Z", "expired": False},
+    ]
+
+    assert pick_newest(elenco)["id"] == 1
+
+    with pytest.raises(SyncError):
+        pick_newest([{"id": 3, "created_at": "x", "expired": True}])
+
+
+def test_errore_leggibile_senza_artifact() -> None:
+    from pricedrop.sync import pick_newest
+
+    with pytest.raises(SyncError, match="Nessun database pubblicato"):
+        pick_newest([])
