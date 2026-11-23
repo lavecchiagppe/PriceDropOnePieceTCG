@@ -73,9 +73,11 @@ min_saving_cents = 300
 # Rimettilo a true solo se rinunci alla raccolta nel cloud.
 enabled = false
 # Intervallo in minuti. Il minimo accettato è 5, per non martellare l'API.
-# Lo legge anche scripts/installa-autostart.ps1 per l'attività pianificata:
-# se lo cambi, rilancia quello script perché l'attività si aggiorni.
-interval_minutes = 15
+# Va tenuto uguale al cron di .github/workflows/raccolta.yml: la dashboard lo
+# usa per sapere ogni quanto ha senso riallinearsi col cloud, e per dirlo in
+# fondo alla pagina. Lo legge anche scripts/installa-autostart.ps1, se un
+# domani rimetti la raccolta su questo PC.
+interval_minutes = 5
 
 [notifications]
 # Toast di Windows quando il ciclo di raccolta gira su questo PC.

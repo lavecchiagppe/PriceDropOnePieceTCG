@@ -507,8 +507,12 @@
   </span>
   <span>
     {% if scheduler.enabled %}
-      Raccolta automatica ogni {{ scheduler.interval_minutes }} minuti.
+      Raccolta automatica ogni {{ scheduler.interval_minutes }} minuti, su questo PC.
       {% if scheduler.next_run_at %}Prossima intorno alle {{ scheduler.next_run_at | when }}.{% endif %}
+    {% elif cloud.enabled %}
+      {# Non e' "disattivata": gira altrove, ed e' la configurazione normale. #}
+      La raccolta gira su GitHub Actions ogni {{ scheduler.interval_minutes }} minuti,
+      anche a PC spento.
     {% else %}
       Raccolta automatica disattivata in config.toml.
     {% endif %}
@@ -526,7 +530,8 @@
           {%- if cloud.state.result.alerts %} e {{ cloud.state.result.alerts }} segnalazioni{% endif %}.
         {% endif %}
       {% else %}
-        La raccolta gira su GitHub Actions: questa pagina si allinea da se'.
+        {# Prima visita dall'avvio: l'allineamento e' appena partito. #}
+        Questa pagina si allinea da se', a ogni visita.
       {% endif %}
       {% if cloud.state.error %}
         <br><span style="color: var(--neg)">Allineamento non riuscito: {{ cloud.state.error }}</span>
