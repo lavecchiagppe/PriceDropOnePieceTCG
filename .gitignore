@@ -5,12 +5,12 @@
 *.pem
 
 # Database e dati raccolti.
-# Il database fa eccezione: la raccolta automatica su GitHub Actions lo
-# ricommitta a ogni ciclo, ed e' li' che vive lo storico dei prezzi. I file
-# temporanei del journal, invece, non vanno mai versionati.
-data/*
-!data/pricedrop.db
-data/logs/
+# Su main il database non si versiona: la dashboard locale ci scrive, e un
+# file versionato manderebbe in conflitto ogni git pull. La copia durevole
+# dello storico vive sul branch "dati", che il workflow aggiorna una volta al
+# giorno, e il PC si allinea con `python -m pricedrop sync`.
+data/
+*.db
 *.db-journal
 *.db-wal
 *.db-shm

@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 from .. import analysis, db, queries
 from ..config import Settings, load_settings
 from ..scheduler import CollectionScheduler
+from ..sync import CloudSync, SyncError
 from .charts import (
     lines_chart_svg,
     parse_points,
@@ -94,6 +95,8 @@ def _when(value: str | None) -> str:
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or load_settings(require_token=False)
     scheduler = CollectionScheduler(settings)
+    # La raccolta vera gira nel cloud: questo porta qui i dati che produce.
+    cloud = CloudSync(settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -107,6 +110,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             scheduler.stop()
 
     app = FastAPI(title="PriceDrop One Piece TCG", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def allinea_dal_cloud(request: Request, call_next):
+        """Chiede un sync a ogni visita, senza far aspettare la pagina.
+
+        Il lavoro parte in un thread e la risposta esce subito: scaricare
+        l'artifact prima di rispondere aggiungerebbe qualche secondo a ogni
+        clic. Chi vuole i dati adesso ha il pulsante, che invece aspetta.
+        Un intervallo minimo interno evita un download per ogni clic di
+        navigazione: prima del ciclo successivo non c'e' nulla di nuovo.
+        """
+        if request.method == "GET":
+            cloud.sync_in_background()
+        return await call_next(request)
 
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
     templates.env.filters["euro"] = _euro
@@ -155,6 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             context={
                 "settings": settings,
                 "scheduler": scheduler,
+                "cloud": cloud,
                 **context,
             },
         )
@@ -399,6 +417,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except Exception:
             # L'errore e gia registrato nello stato dello scheduler e nel
             # database: la pagina lo mostrera.
+            pass
+        return RedirectResponse(_safe_redirect(back), status_code=303)
+
+    @app.post("/sync")
+    def sync_now(back: str = Form(default="/")) -> RedirectResponse:
+        # Questo e' bloccante, al contrario del sync automatico: chi preme il
+        # pulsante vuole vedere i dati nuovi nella pagina che si ricarica,
+        # non al clic successivo.
+        try:
+            cloud.sync_now()
+        except SyncError:
+            # Il motivo e' nello stato, il footer lo mostra.
             pass
         return RedirectResponse(_safe_redirect(back), status_code=303)
 

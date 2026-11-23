@@ -37,10 +37,10 @@ Poi copia `.env.example` in `.env` e incolla il token dopo
 .venv\Scripts\python.exe -m pricedrop serve
 ```
 
-Apre la dashboard su <http://127.0.0.1:8000>. La raccolta periodica la fa
-l'attivita' pianificata descritta sotto, quindi va avanti anche a dashboard
-chiusa. E il modo normale di usare il progetto: i comandi qui sotto servono a
-configurarlo e a ispezionarlo.
+Apre la dashboard su <http://127.0.0.1:8000>. La raccolta periodica gira
+altrove (su GitHub Actions, o con l'attivita' pianificata descritta sotto),
+quindi va avanti anche a dashboard chiusa. E il modo normale di usare il
+progetto: i comandi qui sotto servono a configurarlo e a ispezionarlo.
 
 La dashboard mostra le occasioni sul mercato in questo momento, le segnalazioni
 recenti, le carte di maggior valore e l'esito dei cicli. In cima c'e' una
@@ -75,8 +75,9 @@ Due strade, alternative fra loro:
 - **Su questo PC**, con due attivita' pianificate di Windows (la sezione qui
   sotto). Richiede che il PC sia acceso o sospeso, con la rete disponibile.
 - **Online su GitHub Actions**, a PC spento: vedi [CLOUD.md](CLOUD.md). La
-  raccolta e le notifiche email e Telegram girano sui server di GitHub, la
-  dashboard resta locale.
+  raccolta gira sui server di GitHub ogni 5 minuti, con le notifiche email e
+  Telegram; la dashboard resta locale e si allinea da se' a ogni visita, o col
+  pulsante "Aggiorna dal cloud".
 
 ### Sul PC: attivita' pianificate di Windows
 
@@ -199,6 +200,17 @@ un euro non puo' generare un alert da 3 EUR di risparmio.
 ```
 
 Verifica il token e che il gioco One Piece sia raggiungibile.
+
+```powershell
+.venv\Scripts\python.exe -m pricedrop sync
+```
+
+Allinea il database locale con la raccolta che gira su GitHub Actions: scarica
+l'artifact dell'ultimo ciclo riuscito e travasa le righe che mancano. La
+dashboard lo fa da se' a ogni visita, quindi a riga di comando serve per vedere
+cosa ha portato e per controllare che il collegamento funzioni. Servono la CLI
+`gh` autenticata e il progetto in un repository git; i dettagli in
+[CLOUD.md](CLOUD.md).
 
 ```powershell
 .venv\Scripts\python.exe -m pricedrop sets

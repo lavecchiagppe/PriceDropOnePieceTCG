@@ -21,6 +21,7 @@ import argparse
 import logging
 import re
 import sys
+from datetime import datetime
 
 from . import db
 from .collector import NoExpansionsConfigured, collect
@@ -256,6 +257,55 @@ def cmd_notify(settings: Settings) -> int:
     return 0
 
 
+def cmd_sync(settings: Settings) -> int:
+    """Allinea il database locale con la raccolta che gira nel cloud.
+
+    La dashboard lo fa da se' a ogni visita, ma a riga di comando serve per
+    controllare che il collegamento funzioni, e per allinearsi senza aprire
+    il browser.
+    """
+    from .sync import CloudSync, SyncError
+
+    sync = CloudSync(settings)
+    if not sync.enabled:
+        print(
+            "Sync non disponibile: servono la CLI gh autenticata "
+            "(gh auth login) e il progetto in un repository git."
+        )
+        return 1
+
+    try:
+        result = sync.sync_now()
+    except SyncError as exc:
+        print(f"Sync non riuscito: {exc}", file=sys.stderr)
+        return 1
+
+    quando = _when_cloud(result.run_at)
+    print(f"Ultimo ciclo nel cloud: {quando} (run {result.run_id})")
+    if result.empty:
+        print("Nessun dato nuovo: il database locale era gia' allineato.")
+        return 0
+
+    print(f"Snapshot aggiunti:    {result.snapshots}")
+    print(f"Segnalazioni aggiunte:{result.alerts:>4}")
+    if result.cards:
+        print(f"Carte nuove:          {result.cards}")
+    if result.runs:
+        print(f"Cicli storicizzati:   {result.runs}")
+    return 0
+
+
+def _when_cloud(raw: str | None) -> str:
+    """Orario del ciclo remoto, nel fuso locale e in forma leggibile."""
+    if not raw:
+        return "orario non disponibile"
+    try:
+        istante = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return raw
+    return istante.astimezone().strftime("%d/%m %H:%M")
+
+
 def cmd_serve(settings: Settings) -> int:
     # Import ritardati: le dipendenze web non servono agli altri comandi.
     import uvicorn
@@ -354,11 +404,12 @@ COMMANDS = {
     "alerts": cmd_alerts,
     "trends": cmd_trends,
     "notify": cmd_notify,
+    "sync": cmd_sync,
     "serve": cmd_serve,
 }
 
 # Comandi che funzionano senza token, perche non toccano la rete.
-OFFLINE_COMMANDS = {"init-db", "status", "alerts", "trends", "notify"}
+OFFLINE_COMMANDS = {"init-db", "status", "alerts", "trends", "notify", "sync"}
 
 
 def main(argv: list[str] | None = None) -> int:

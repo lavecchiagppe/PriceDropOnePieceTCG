@@ -461,17 +461,37 @@
       <a href="/market"{% if path.startswith("/market") %} aria-current="page"{% endif %}>Mercato</a>
       <a href="/search"{% if path.startswith("/search") %} aria-current="page"{% endif %}>Cerca</a>
     </nav>
-    <form method="post" action="/collect">
-      {# Il filtro attivo va conservato: dopo la raccolta si torna alla stessa vista. #}
-      <input type="hidden" name="back" value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
-      <button type="submit">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <path d="M14 8a6 6 0 1 1-1.76-4.24M14 2.2v3.4h-3.4" stroke="currentColor"
-                stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        Raccogli ora
-      </button>
-    </form>
+    {% set back_to = request.url.path ~ ("?" ~ request.url.query if request.url.query else "") %}
+    <div class="row" style="gap: 8px">
+      {% if cloud.enabled %}
+      {# Il sync e' il gesto normale: la raccolta gira nel cloud, qui si
+         scarica cio' che ha prodotto. #}
+      <form method="post" action="/sync">
+        <input type="hidden" name="back" value="{{ back_to }}">
+        <button type="submit">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 1.8v6.6M8 1.8L5.4 4.4M8 1.8l2.6 2.6" stroke="currentColor"
+                  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"
+                  transform="rotate(180 8 5.1)"/>
+            <path d="M2.6 9.2v2.6a1.6 1.6 0 0 0 1.6 1.6h7.6a1.6 1.6 0 0 0 1.6-1.6V9.2"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+          Aggiorna dal cloud
+        </button>
+      </form>
+      {% endif %}
+      <form method="post" action="/collect">
+        {# Il filtro attivo va conservato: dopo la raccolta si torna alla stessa vista. #}
+        <input type="hidden" name="back" value="{{ back_to }}">
+        <button type="submit"{% if cloud.enabled %} class="ghost"{% endif %}>
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M14 8a6 6 0 1 1-1.76-4.24M14 2.2v3.4h-3.4" stroke="currentColor"
+                  stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Raccogli ora
+        </button>
+      </form>
+    </div>
   </div>
 </header>
 
@@ -494,6 +514,23 @@
     {% endif %}
     {% if scheduler.state.error %}
       <br><span style="color: var(--neg)">Ultimo ciclo non riuscito: {{ scheduler.state.error }}</span>
+    {% endif %}
+    {% if cloud.enabled %}
+      <br>
+      {% if cloud.state.last_success_at %}
+        Allineato col cloud {{ cloud.state.last_success_at | when }}:
+        {% if cloud.state.result.empty %}
+          non c'era nulla di nuovo.
+        {% else %}
+          {{ cloud.state.result.snapshots }} snapshot
+          {%- if cloud.state.result.alerts %} e {{ cloud.state.result.alerts }} segnalazioni{% endif %}.
+        {% endif %}
+      {% else %}
+        La raccolta gira su GitHub Actions: questa pagina si allinea da se'.
+      {% endif %}
+      {% if cloud.state.error %}
+        <br><span style="color: var(--neg)">Allineamento non riuscito: {{ cloud.state.error }}</span>
+      {% endif %}
     {% endif %}
   </span>
 </footer>
