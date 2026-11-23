@@ -79,14 +79,19 @@ segnalazioni ha prodotto. Se c'erano segnalazioni nuove, l'email arriva.
 
 Dal ciclo successivo parte da se, ogni 15 minuti.
 
-### 4. Spegni la raccolta locale (opzionale)
+### 4. Spegni la raccolta locale
 
-Se la lasci attiva, il PC e GitHub raccolgono entrambi e le chiamate all'API
-raddoppiano. Per togliere l'attivita pianificata di Windows:
+Non e opzionale: se la lasci attiva, il PC e GitHub raccolgono entrambi, le
+chiamate all'API raddoppiano e i due database divergono, perche ognuno scrive
+snapshot che l'altro non ha. Va rimossa **solo** l'attivita di raccolta:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\disinstalla-autostart.ps1
+Unregister-ScheduledTask -TaskName 'PriceDropOnePieceTCG-Raccolta' -Confirm:$false
 ```
+
+Non usare `scripts\disinstalla-autostart.ps1` per questo: rimuove anche l'avvio
+automatico della dashboard e il collegamento sul desktop, che in locale
+restano utili.
 
 ## Tenere allineata la dashboard locale
 

@@ -96,6 +96,17 @@ powershell -ExecutionPolicy Bypass -File scripts\installa-autostart.ps1
   attivo: se il PC e' sospeso, Windows lo sveglia, raccoglie e lo lascia
   tornare a dormire.
 
+> **Attenzione se usi la raccolta su GitHub Actions.** L'attivita'
+> `PriceDropOnePieceTCG-Raccolta` e' stata rimossa proprio perche' raccoglieva
+> in parallelo al cloud: raddoppiava le chiamate all'API e i due database
+> divergevano. Rilanciare `installa-autostart.ps1` la ricrea. Se ti serve solo
+> riavere la dashboard al login, reinstalla e poi togli di nuovo la sola
+> raccolta:
+>
+> ```powershell
+> Unregister-ScheduledTask -TaskName 'PriceDropOnePieceTCG-Raccolta' -Confirm:$false
+> ```
+
 Lo script mette anche sul desktop il collegamento "PriceDrop One Piece", che
 apre la dashboard con un clic: non serve piu' digitare l'indirizzo.
 

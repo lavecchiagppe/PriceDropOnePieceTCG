@@ -67,10 +67,10 @@ min_saving_cents = 300
 
 [schedule]
 # Ciclo di raccolta automatico mentre la dashboard è in esecuzione.
-# Disattivato: la raccolta oraria la fa l'attività pianificata
-# PriceDropOnePieceTCG-Raccolta, che gira anche a dashboard chiusa e sveglia
-# il PC se è sospeso. Tenerlo acceso raddoppierebbe le chiamate all'API.
-# Rimettilo a true se togli quell'attività (scripts/disinstalla-autostart.ps1).
+# Disattivato: la raccolta la fa GitHub Actions, sui server GitHub, ogni
+# `interval_minutes` e anche a PC spento (vedi CLOUD.md). Tenerlo acceso
+# raddoppierebbe le chiamate all'API.
+# Rimettilo a true solo se rinunci alla raccolta nel cloud.
 enabled = false
 # Intervallo in minuti. Il minimo accettato è 5, per non martellare l'API.
 # Lo legge anche scripts/installa-autostart.ps1 per l'attività pianificata:
