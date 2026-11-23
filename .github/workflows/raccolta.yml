@@ -91,11 +91,19 @@ jobs:
       - name: Installa le dipendenze
         run: pip install -r requirements.txt
 
-      # La chiave cambia a ogni run, cosi' il post-step salva sempre una voce
-      # nuova; restore-keys ripesca la piu' recente di quelle precedenti.
+      # restore + save separati, non `actions/cache`: serve sapere SE la cache
+      # e' stata ripresa, e solo `actions/cache/restore` espone
+      # `cache-matched-key`. Con `actions/cache` quell'output e' sempre vuoto,
+      # quindi lo step di recupero qui sotto girava a ogni run e sovrascriveva
+      # la cache appena ripresa con la copia giornaliera: lo storico raccolto
+      # dai run precedenti della stessa giornata andava perso ogni volta.
+      #
+      # La chiave cambia a ogni run, cosi' il salvataggio finale aggiunge
+      # sempre una voce nuova; restore-keys ripesca la piu' recente fra quelle
+      # dei run precedenti.
       - name: Riprendi il database dalla cache
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.DB }}
           key: database-${{ github.run_id }}
@@ -140,6 +148,15 @@ jobs:
         uses: ./.github/actions/raccogli
         with:
           database: ${{ env.DB }}
+
+      # Il salvataggio e' esplicito e `always()`: se una rilevazione fallisce a
+      # meta' job, lo storico raccolto fino a quel punto non va perso.
+      - name: Salva il database nella cache
+        if: always() && hashFiles(env.DB) != ''
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.DB }}
+          key: database-${{ github.run_id }}
 
       - name: Aggiorna la copia durevole, una volta al giorno
         # Gira anche se una rilevazione e' fallita: meglio salvare lo storico
