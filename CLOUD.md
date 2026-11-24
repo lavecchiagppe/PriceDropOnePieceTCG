@@ -8,7 +8,7 @@ Cosa cambia rispetto a ora:
 
 | | Sul PC | Su GitHub Actions |
 |---|---|---|
-| Raccolta prezzi | attivita pianificata di Windows | workflow `.github/workflows/raccolta.yml`, una rilevazione ogni 5 minuti |
+| Raccolta prezzi | attivita pianificata di Windows | workflow `.github/workflows/raccolta.yml`, una rilevazione ogni 5 minuti, in catena continua |
 | Notifiche email e Telegram | si | si, identiche |
 | Toast di Windows | si | no: i runner sono Linux, il canale si disattiva da se |
 | Storico prezzi | `data/pricedrop.db` locale | cache fra i cicli, artifact a ogni ciclo, branch `dati` una volta al giorno |
@@ -41,17 +41,49 @@ comportamento noto: i run `schedule` sono dichiaratamente "best effort",
 vengono accodati e sotto carico scartati, e gli intervalli brevi sono i primi
 a saltare.
 
-Ora il cron chiede poco e il job fa il resto: parte quattro volte all'ora (ai
-minuti 3, 18, 33 e 48, lontano dall'inizio dell'ora dove la coda di GitHub e
-piu affollata) e dentro allo stesso job raccoglie **tre volte, a 5 minuti di
-distanza**. La frequenza delle rilevazioni resta quella, ma dipende da un
-terzo delle occasioni di essere ritardata. Le attese dentro al job non costano
-nulla: su repository pubblico i minuti sono illimitati.
+Nemmeno un cron ogni quarto d'ora e bastato: in dodici ore GitHub ne ha
+eseguito **uno solo**, su una quarantina di slot. Il cron funziona, ma non e
+un orologio.
 
-Il ciclo singolo sta in `.github/actions/raccogli/action.yml`, richiamato tre
-volte da `raccolta.yml`: raccoglie, consolida il database e ripubblica
-l'artifact. Cosi' il PC puo allinearsi gia' a meta' job, senza aspettare che
-finisca.
+Quindi la frequenza non dipende piu da lui, ma da due meccanismi:
+
+1. **Dentro al job**, si raccoglie **tre volte a 5 minuti di distanza**. Il
+   ciclo singolo sta in `.github/actions/raccogli/action.yml`, richiamato tre
+   volte da `raccolta.yml`: raccoglie, consolida il database e ripubblica
+   l'artifact. Cosi il PC puo allinearsi gia a meta job, senza aspettare che
+   finisca.
+2. **Fra un job e l'altro**, l'ultimo step lancia il run successivo. Ogni
+   anello dura circa dodici minuti, quindi la catena copre le 24 ore senza
+   buchi, e non dipende da nessuno scheduler.
+
+La catena funziona **senza token personali**: la regola per cui un workflow
+non puo avviarne un altro col `GITHUB_TOKEN` ha due eccezioni esplicite,
+`workflow_dispatch` e `repository_dispatch`. Serve solo `actions: write` nei
+permessi del workflow.
+
+Il cron resta, ma col ruolo di rete di sicurezza: se la catena si spezza (un
+run cancellato, un guasto di GitHub), al prossimo slot onorato riparte da se.
+
+### Fermare la catena
+
+Questo e l'unico modo di interrompere la raccolta, ed e immediato: crea sul
+branch `main` un file vuoto che si chiami
+
+```
+.github/ferma-catena
+```
+
+Si fa anche dall'interfaccia di GitHub, senza PC: **Add file -> Create new
+file**, come nome `.github/ferma-catena`, poi **Commit changes**. L'ultimo
+step lo controlla a ogni anello e non rilancia. Il ciclo in corso arriva
+comunque in fondo.
+
+Per ripartire: cancella il file e lancia una raccolta da **Actions ->
+Raccolta prezzi -> Run workflow**.
+
+C'e anche un freno automatico: se un run fallisse in pochi secondi, la catena
+si rilancerebbe a raffica. Lo step aspetta comunque fino a dieci minuti prima
+di rilanciare, quindi nemmeno nel caso peggiore si superano i sei run l'ora.
 
 Il vincolo che resta non sono i minuti ma l'API di CardTrader: un ciclo fa una
 trentina di chiamate (le espansioni, i listing di ogni set, le riverifiche),
