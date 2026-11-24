@@ -4,7 +4,7 @@
 # si impostano una volta in Settings -> Secrets and variables -> Actions
 # del repository, e il workflow li legge come variabili d'ambiente.
 #
-# PERCHE' IL JOB SI DA' LA FREQUENZA DA SOLO.
+# PERCHE' IL JOB SI DA' LA FREQUENZA DA SOLO, E SI RILANCIA.
 #
 # La prima versione usava `cron: */5`, il minimo consentito. GitHub lo ha
 # semplicemente ignorato: workflow attivo, cron valido, Actions abilitato, e
@@ -12,11 +12,22 @@
 # documentato: i run `schedule` sono "best effort", vengono accodati e sotto
 # carico scartati, e gli intervalli brevi sono i primi a saltare.
 #
-# Quindi il cron chiede poco e il job fa il resto: parte ogni 15 minuti, e
-# dentro allo stesso job raccoglie tre volte a 5 minuti di distanza. Le
-# rilevazioni restano una ogni 5 minuti, ma dipendono da un terzo delle
-# occasioni di essere ritardate o saltate. Le attese dentro al job non
-# costano nulla: su repository pubblico i minuti sono illimitati.
+# Nemmeno un cron ogni quarto d'ora e' bastato: in dodici ore GitHub ne ha
+# eseguito uno solo. Il cron resta, ma come rete di sicurezza, non come
+# orologio: e' l'ultimo step a lanciare il run successivo, e la catena si
+# regge da sola.
+#
+# Funziona col token integrato, senza token personali: la regola per cui un
+# workflow non puo' avviarne un altro col GITHUB_TOKEN ha due eccezioni
+# esplicite, `workflow_dispatch` e `repository_dispatch`.
+#
+# Dentro allo stesso job si raccoglie tre volte a 5 minuti di distanza, quindi
+# ogni anello della catena copre un quarto d'ora. Le attese non costano nulla:
+# su repository pubblico i minuti sono illimitati.
+#
+# PER FERMARE TUTTO: crea sul branch main un file vuoto che si chiami
+# `.github/ferma-catena`. L'ultimo step lo controlla e non rilancia. Per
+# ripartire, cancella il file e lancia una raccolta dalla tab Actions.
 #
 # DOVE VIVE IL DATABASE, e perche' non su main.
 #
@@ -48,9 +59,11 @@ on:
   # Permette di lanciare una raccolta a mano dalla tab Actions.
   workflow_dispatch:
 
-# Serve per il commit giornaliero sul branch dati.
+# contents: per il commit giornaliero sul branch dati.
+# actions:  per lanciare il run successivo (la catena, vedi in fondo).
 permissions:
   contents: write
+  actions: write
 
 # Due run in parallelo sprecherebbero chiamate API e si scontrerebbero sulla
 # cache: si mettono in coda invece di sovrapporsi. Il job dura circa 11
@@ -81,6 +94,11 @@ jobs:
     steps:
       - name: Scarica il repository
         uses: actions/checkout@v4
+
+      - name: Segna l'istante di partenza
+        # Serve al freno dell'ultimo step: se il job fallisce in pochi secondi,
+        # senza questo la catena si rilancerebbe a raffica.
+        run: echo "INIZIO=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Prepara Python
         uses: actions/setup-python@v5
@@ -188,3 +206,27 @@ jobs:
           git add -f "$DB"
           git commit -q -m "Database al $oggi"
           git push -f origin "HEAD:$BRANCH_DATI"
+
+      # L'anello successivo della catena. `always()` perche' un ciclo fallito
+      # non deve spezzarla: il prossimo run riprende lo storico dalla cache e
+      # riparte. L'unico modo di fermarla e' il file di stop.
+      - name: Lancia il ciclo successivo
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f .github/ferma-catena ]; then
+            echo "Trovato .github/ferma-catena: la catena si ferma qui."
+            exit 0
+          fi
+          # Un anello dura una dozzina di minuti. Se questo e' finito molto
+          # prima vuol dire che qualcosa e' andato storto: si aspetta comunque,
+          # cosi' una catena di run falliti non gira a vuoto a raffica.
+          trascorsi=$(( $(date +%s) - INIZIO ))
+          if [ "$trascorsi" -lt 600 ]; then
+            attesa=$(( 600 - trascorsi ))
+            echo "Il ciclo e' durato ${trascorsi}s: aspetto ${attesa}s prima di rilanciare."
+            sleep "$attesa"
+          fi
+          echo "Lancio il ciclo successivo."
+          gh workflow run "${{ github.workflow }}" --ref "${{ github.ref_name }}"
